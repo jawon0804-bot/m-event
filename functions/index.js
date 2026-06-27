@@ -122,8 +122,8 @@ exports.onInspectionLog = functions
     const prevMemo = (before?.memo || "").trim();
     if (memo === prevMemo) return null;
 
-    const centerName  = after.centerName  || "";
-    const facilityId  = after.facilityId  || "";
+    const centerName  = after.center_name  || "";
+    const facilityId  = after.facility_id  || "";
     const worker      = after.worker      || "";
     const datetime    = after.datetime    || "";
     const logDocId    = context.params.docId;
