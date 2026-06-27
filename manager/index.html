@@ -764,7 +764,7 @@ async function loadExcel() {
   el.innerHTML = ""; sp.classList.add("show");
   try {
     let q = db.collection("Maxerve_Excel").orderBy("datetime","desc");
-    if (center) q = q.where("centerName","==",center);
+    if (center) q = q.where("center_name","==",center);
     if (start)  q = q.where("datetime",">=",start);
     if (end)    q = q.where("datetime","<=",end+"\uffff");
     const snap = await q.get();
@@ -786,9 +786,9 @@ async function loadExcel() {
         <div class="excel-item">
           <div class="excel-icon">📊</div>
           <div class="excel-info">
-            <div class="excel-title">${esc(item.facilityId||"점검표")}</div>
+            <div class="excel-title">${esc(item.facility_id||"점검표")}</div>
             <div class="excel-meta">날짜: ${esc(item.datetime||"")}</div>
-            <div class="excel-center">${esc(item.centerName||"")}</div>
+            <div class="excel-center">${esc(item.center_name||"")}</div>
           </div>
           <a class="dl-btn" href="${esc(item.file_url||"#")}" target="_blank">⬇ 다운로드</a>
         </div>`;
@@ -814,11 +814,11 @@ async function loadDashPhotos() {
   el.innerHTML = ""; sp.classList.add("show");
   try {
     let q = db.collection("inspection_logs").orderBy("datetime","desc");
-    if (center) q = q.where("centerName","==",center);
+    if (center) q = q.where("center_name","==",center);
     const snap = await q.get();
     const filtered = snap.docs.filter(d => {
       const data  = d.data();
-      const count = parseInt((data.photoCount||"0").replace(/[^0-9]/g,""));
+      const count = parseInt((data.photo_count||"0").replace(/[^0-9]/g,""));
       if (count <= 0) return false;
       const dt = (data.datetime||"").slice(0,10);
       if (start && dt < start) return false;
@@ -837,11 +837,11 @@ async function loadDashPhotos() {
     let html = "";
     Object.keys(groups).sort().reverse().forEach(date => {
       const items       = groups[date];
-      const totalPhotos = items.reduce((s,i) => s + parseInt((i.photoCount||"0").replace(/[^0-9]/g,"")), 0);
+      const totalPhotos = items.reduce((s,i) => s + parseInt((i.photo_count||"0").replace(/[^0-9]/g,"")), 0);
       html += `
         <div class="photo-group-header">
           <span>📅 ${date} (${items.length}건 · 사진 ${totalPhotos}장)</span>
-          <span style="font-size:12px;color:var(--gray4)">${esc(items[0]?.centerName||"")}</span>
+          <span style="font-size:12px;color:var(--gray4)">${esc(items[0]?.center_name||"")}</span>
         </div>
         <div class="photo-group-body">
           <div class="photo-grid-dash" id="pgrid-${date}">
@@ -865,14 +865,14 @@ async function loadPhotoGroup(date, items) {
   if (!grid) return;
   const cards = [];
   for (const item of items) {
-    const count      = parseInt((item.photoCount||"0").replace(/[^0-9]/g,""));
-    const facilityId = (item.facilityId||"").replace(/\s/g,"_");
+    const count      = parseInt((item.photo_count||"0").replace(/[^0-9]/g,""));
+    const facilityId = (item.facility_id||"").replace(/\s/g,"_");
     const dt         = (item.datetime||"").replace(/[-: ]/g,"").slice(0,12);
     for (let i = 1; i <= Math.min(count,3); i++) {
       const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;
       try {
         const url = await storage.ref(`inspection_photos/${fileName}`).getDownloadURL();
-        cards.push({ url, fileName, facilityId: item.facilityId, datetime: item.datetime });
+        cards.push({ url, fileName, facilityId: item.facility_id, datetime: item.datetime });
       } catch(e) { if (e.code !== "storage/object-not-found") console.warn(fileName, e.code); }
     }
   }
