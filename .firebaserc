@@ -1,0 +1,13 @@
+{
+  "projects": {
+    "default": "m-smart-90148"
+  },
+  "targets": {
+    "m-smart-90148": {
+      "hosting": {
+        "main-site": ["m-smart-90148"]
+      }
+    }
+  },
+  "etags": {}
+}
