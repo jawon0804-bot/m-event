@@ -225,7 +225,7 @@ app.post("/api/login", async (req, res) => {
       return res.status(403).json({ ok: false, message: "접근이 제한된 계정입니다. 관리자에게 문의하세요." });
     }
 
-    return res.json({ ok: true, center: userData.center_name || "" });
+    return res.json({ ok: true, center: userData.center || "" });
   } catch (err) {
     console.error("로그인 처리 오류:", err);
     return res.status(500).json({ ok: false, message: "서버 연결에 문제가 발생했습니다." });
@@ -390,20 +390,6 @@ app.post("/api/dashboard/refresh", (req, res) => {
     cache.clear();
   }
   res.json({ ok: true });
-});
-
-// ── /api/fidlocations ──────────────────────────────────────────
-// fid → fid_name 매핑 반환 (m-event 이벤트트래커에서 사용)
-app.get("/api/fidlocations", async (req, res) => {
-  const center = (req.query.center || "").toString().trim();
-  if (!center) return res.status(400).json({ ok: false, message: "center 파라미터가 필요합니다." });
-  try {
-    const locations = await getFidLocations(center);
-    return res.json({ ok: true, fidLocations: locations });
-  } catch(e) {
-    console.error("fidlocations 오류:", e);
-    return res.status(500).json({ ok: false, message: "조회 중 오류가 발생했습니다." });
-  }
 });
 
 app.get("/healthz", (req, res) => res.send("ok"));
