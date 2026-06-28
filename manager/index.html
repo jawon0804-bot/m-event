@@ -729,7 +729,7 @@ async function loadEventPhotos(ev) {
   for (let i = 1; i <= Math.min(count,3); i++) {
     const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;
     try {
-      const url = await storage.ref(`inspection_photos/${fileName}`).getDownloadURL();
+      const url = await storage.ref(`inspection_photos/${ev.center_name}/${fileName}`).getDownloadURL();
       urls.push({ url, fileName, facilityId: ev.facility_id });
     } catch(e) { console.warn("사진 로드 실패:", fileName); }
   }
@@ -871,7 +871,7 @@ async function loadPhotoGroup(date, items) {
     for (let i = 1; i <= Math.min(count,3); i++) {
       const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;
       try {
-        const url = await storage.ref(`inspection_photos/${fileName}`).getDownloadURL();
+        const url = await storage.ref(`inspection_photos/${item.center_name}/${fileName}`).getDownloadURL();
         cards.push({ url, fileName, facilityId: item.facility_id, datetime: item.datetime });
       } catch(e) { if (e.code !== "storage/object-not-found") console.warn(fileName, e.code); }
     }
