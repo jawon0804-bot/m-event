@@ -9,7 +9,7 @@
  *   firebase deploy --only functions
  * 
  * [환경변수 설정]
- *   firebase functions:config:set gmail.user="your@gmail.com" gmail.pass="앱비밀번호"
+ *   환경변수 설정: GMAIL_USER, GMAIL_PASS (GitHub Secrets 또는 .env 파일)
  */
 
 const functions = require("firebase-functions");
@@ -23,8 +23,8 @@ const db = admin.firestore();
 const getTransporter = () => nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: functions.config().gmail.user,
-    pass: functions.config().gmail.pass,
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
   },
 });
 
@@ -57,7 +57,7 @@ async function sendMail(to, subject, html) {
   try {
     const transporter = getTransporter();
     await transporter.sendMail({
-      from: `"M-Engine 알림" <${functions.config().gmail.user}>`,
+      from: `"M-Engine 알림" <${process.env.GMAIL_USER}>`,
       to: Array.isArray(to) ? to.join(", ") : to,
       subject,
       html,
