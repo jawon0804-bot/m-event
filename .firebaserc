@@ -5,7 +5,7 @@
   "targets": {
     "m-smart-90148": {
       "hosting": {
-        "main-site": ["m-smart-90148"]
+        "main-site": ["m-smart-0804"]
       }
     }
   },
