@@ -516,6 +516,7 @@ const DASHBOARD_API = "https://facility-dashboard-267082158406.asia-northeast3.r
 let currentUser  = null;
 let allEvents    = [];
 let fidLocations = {};
+let sheetLabels  = {};
 let eventTab     = "진행중";
 let currentPage  = "event";
 let currentEvent = null;
@@ -574,7 +575,7 @@ async function loadFidLocations() {
     const center = currentUser.center_name === "Master" ? "Master" : currentUser.center_name;
     const res = await fetch(`${DASHBOARD_API}/api/fidlocations?center=${encodeURIComponent(center)}`);
     const data = await res.json();
-    if (data.ok) fidLocations = data.fidLocations || {};
+    if (data.ok) { fidLocations = data.fidLocations || {}; sheetLabels = data.sheetLabels || {}; }
   } catch(e) { console.warn("fidLocations 로드 실패:", e); }
 }
 
@@ -666,7 +667,7 @@ function renderList() {
       <div class="status-dot ${ev.status}"></div>
       <div class="event-meta">
         <div class="event-center">${esc(ev.center_name||"")}</div>
-        <div class="event-facility">${esc(ev.fid_name||ev.facility_id||"")}</div>
+        <div class="event-facility">${esc(sheetLabels[ev.facility_id]||ev.fid_name||ev.facility_id||"")}</div>
       </div>
       <div class="event-body">
         <div class="event-memo">${esc(ev.memo||"")}</div>
@@ -700,7 +701,7 @@ function openModal(eventId) {
   document.getElementById("modal-dot").className        = `status-dot ${currentEvent.status}`;
   document.getElementById("modal-title-text").textContent = currentEvent.memo || "";
   document.getElementById("m-center").textContent       = currentEvent.center_name  || "";
-  document.getElementById("m-facility").textContent     = currentEvent.fid_name || currentEvent.facility_id  || "";
+  document.getElementById("m-facility").textContent     = sheetLabels[currentEvent.facility_id] || currentEvent.fid_name || currentEvent.facility_id  || "";
   document.getElementById("m-worker").textContent       = currentEvent.worker        || "";
   document.getElementById("m-datetime").textContent     = currentEvent.datetime      || "";
   loadEventPhotos(currentEvent);
@@ -841,7 +842,7 @@ async function loadExcel() {
         <div class="excel-item">
           <div class="excel-icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div>
           <div class="excel-info">
-            <div class="excel-title">${esc(fidLocations[item.facility_id]||item.facility_id||"점검표")}</div>
+            <div class="excel-title">${esc(sheetLabels[item.facility_id]||fidLocations[item.facility_id]||item.facility_id||"점검표")}</div>
             <div class="excel-meta">날짜: ${esc(item.datetime||"")}</div>
             <div class="excel-center">${esc(item.center_name||"")}</div>
           </div>
@@ -940,7 +941,7 @@ async function loadPhotoGroup(date, items) {
            onclick="openViewer('${url}','${esc(fileName)}','${esc(fid_name||facilityId)}')"
            onerror="this.style.display='none'">
       <div style="flex:1;min-width:0;">
-        <div class="photo-facility">${esc(fidLocations[facilityId]||fid_name||facilityId)}</div>
+        <div class="photo-facility">${esc(sheetLabels[facilityId]||fidLocations[facilityId]||fid_name||facilityId)}</div>
         <div class="photo-name">${esc(datetime||"")}</div>
       </div>
       <a class="photo-dl" href="${url}" download="${esc(fileName)}" target="_blank">⬇ 다운로드</a>
