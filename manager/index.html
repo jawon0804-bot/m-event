@@ -56,11 +56,21 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 }
 .header h1    { font-size: 22px; font-weight: 800; flex: 1; letter-spacing: -0.5px; }
 .header .user { font-size: 11px; color: rgba(255,255,255,.6); }
-.logout-btn {
-  background: rgba(255,255,255,.15); border: none; color: #fff;
-  padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer;
+.logout-btn { display: none; }
+.hidden-logout-btn {
+  background: rgba(255,255,255,.3); color: transparent; border: none;
+  width: 4px; height: 32px; padding: 0 !important; border-radius: 2px;
+  cursor: pointer; transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+  overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
 }
-.logout-btn:hover { background: rgba(255,255,255,.25); }
+.hidden-logout-btn span, .hidden-logout-btn i { opacity: 0; transition: opacity 0.2s ease; white-space: nowrap; }
+.hidden-logout-btn:hover {
+  background: #ef4444; color: white;
+  width: 105px; height: 32px; padding: 0 15px !important; border-radius: 6px;
+}
+.hidden-logout-btn:hover span, .hidden-logout-btn:hover i {
+  opacity: 1; transition-delay: 0.15s;
+}
 
 /* ── 메인 탭 (이벤트/엑셀/사진) ── */
 .main-tabs {
@@ -370,7 +380,10 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   <div class="header">
     <h1>📝 M-Event</h1>
     <span class="user" id="header-user"></span>
-    <button class="logout-btn" onclick="logout()">로그아웃</button>
+    <button class="hidden-logout-btn" onclick="logout()">
+      <i class="fa-solid fa-right-from-bracket"></i>
+      <span>로그아웃</span>
+    </button>
   </div>
 
   <!-- 메인 탭 -->
@@ -499,8 +512,10 @@ const db      = firebase.firestore();
 const storage = firebase.storage();
 
 // ── 상태 ──
+const DASHBOARD_API = "https://facility-dashboard-267082158406.asia-northeast3.run.app";
 let currentUser  = null;
 let allEvents    = [];
+let fidLocations = {};
 let eventTab     = "진행중";
 let currentPage  = "event";
 let currentEvent = null;
@@ -554,12 +569,22 @@ document.addEventListener("keydown", e => {
 // ──────────────────────────────────────────────
 // 앱 초기화
 // ──────────────────────────────────────────────
-async function showApp() {
+async async function loadFidLocations() {
+  try {
+    const center = currentUser.center_name === "Master" ? "Master" : currentUser.center_name;
+    const res = await fetch(`${DASHBOARD_API}/api/fidlocations?center=${encodeURIComponent(center)}`);
+    const data = await res.json();
+    if (data.ok) fidLocations = data.fidLocations || {};
+  } catch(e) { console.warn("fidLocations 로드 실패:", e); }
+}
+
+function showApp() {
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app").style.display          = "flex";
   const centerLabel = currentUser.center_name === "Master" ? "마스터 (전체)" : currentUser.center_name;
   document.getElementById("header-user").textContent = `${currentUser.name} · ${centerLabel}`;
   await buildCenterFilters();
+  loadFidLocations();
   subscribeEvents();
 }
 
@@ -816,7 +841,7 @@ async function loadExcel() {
         <div class="excel-item">
           <div class="excel-icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div>
           <div class="excel-info">
-            <div class="excel-title">${esc(item.facility_id||"점검표")}</div>
+            <div class="excel-title">${esc(fidLocations[item.facility_id]||item.facility_id||"점검표")}</div>
             <div class="excel-meta">날짜: ${esc(item.datetime||"")}</div>
             <div class="excel-center">${esc(item.center_name||"")}</div>
           </div>
@@ -915,7 +940,7 @@ async function loadPhotoGroup(date, items) {
            onclick="openViewer('${url}','${esc(fileName)}','${esc(fid_name||facilityId)}')"
            onerror="this.style.display='none'">
       <div style="flex:1;min-width:0;">
-        <div class="photo-facility">${esc(fid_name||facilityId)}</div>
+        <div class="photo-facility">${esc(fidLocations[facilityId]||fid_name||facilityId)}</div>
         <div class="photo-name">${esc(datetime||"")}</div>
       </div>
       <a class="photo-dl" href="${url}" download="${esc(fileName)}" target="_blank">⬇ 다운로드</a>
