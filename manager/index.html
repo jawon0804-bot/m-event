@@ -719,7 +719,21 @@ async function submitAction(type) {
 async function loadEventPhotos(ev) {
   const grid = document.getElementById("photo-grid");
   const sec  = document.getElementById("photo-section");
-  const count = ev.photo_count || 0;
+
+  // events에 photos URL이 있으면 바로 사용
+  const photoUrls = (ev.photos || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (photoUrls.length > 0) {
+    sec.style.display = "block";
+    grid.innerHTML = photoUrls.map(url => `
+      <div>
+        <img class="photo-thumb" src="${url}" alt="사진"
+             onclick="openEventViewer('${url}')">
+      </div>`).join("");
+    return;
+  }
+
+  // photos URL 없으면 파일명 패턴으로 Storage에서 조회
+  const count = parseInt((ev.photo_count||"0").replace(/[^0-9]/g,""));
   if (count === 0) { sec.style.display = "none"; return; }
   sec.style.display = "block";
   grid.innerHTML = `<div class="photo-loading"><div style="width:18px;height:18px;border:2px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;margin-right:8px;vertical-align:middle"></div>사진 불러오는 중...</div>`;
