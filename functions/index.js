@@ -35,7 +35,7 @@ async function getAdminEmails(center_name) {
   try {
     const snap = await db.collection("UserDB")
       .where("grade", "==", "관리자")
-      .where("center", "in", [center_name, "Master"])
+      .where("center_name", "in", [center_name, "Master"])
       .get();
     return snap.docs
       .map(d => d.data().email)
