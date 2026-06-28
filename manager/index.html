@@ -545,7 +545,7 @@ document.addEventListener("keydown", e => {
 async function showApp() {
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app").style.display          = "flex";
-  const centerLabel = currentUser.center_name === "Master" ? "마스터 (전체)" : currentUser.center;
+  const centerLabel = currentUser.center_name === "Master" ? "마스터 (전체)" : currentUser.center_name;
   document.getElementById("header-user").textContent = `${currentUser.name} · ${centerLabel}`;
   await buildCenterFilters();
   subscribeEvents();
@@ -756,7 +756,7 @@ function closeEventViewer() {
 // 엑셀 로드
 // ──────────────────────────────────────────────
 async function loadExcel() {
-  const center = document.getElementById("filter-center-excel").value || (currentUser.center_name !== "Master" ? currentUser.center : "");
+  const center = document.getElementById("filter-center-excel").value || (currentUser.center_name !== "Master" ? currentUser.center_name : "");
   const start  = document.getElementById("filter-start-excel").value;
   const end    = document.getElementById("filter-end-excel").value;
   const el     = document.getElementById("excel-list");
@@ -806,7 +806,7 @@ async function loadExcel() {
 // 사진 로드
 // ──────────────────────────────────────────────
 async function loadDashPhotos() {
-  const center = document.getElementById("filter-center-photo").value || (currentUser.center_name !== "Master" ? currentUser.center : "");
+  const center = document.getElementById("filter-center-photo").value || (currentUser.center_name !== "Master" ? currentUser.center_name : "");
   const start  = document.getElementById("filter-start-photo").value;
   const end    = document.getElementById("filter-end-photo").value;
   const el     = document.getElementById("photo-list");
