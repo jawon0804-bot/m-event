@@ -71,7 +71,7 @@ async function sendMail(to, subject, html) {
 // ==============================================================================
 // [유틸] 이메일 HTML 템플릿
 // ==============================================================================
-function makeEmailHtml({ title, center_name, facility_id, worker, datetime, memo, actionUrl }) {
+function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, datetime, memo, actionUrl }) {
   return `
   <div style="font-family:Apple SD Gothic Neo,맑은 고딕,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a5f;padding:20px 24px">
@@ -81,7 +81,7 @@ function makeEmailHtml({ title, center_name, facility_id, worker, datetime, memo
       <h3 style="margin:0 0 16px;color:#111;font-size:16px">${title}</h3>
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         <tr><td style="padding:8px 0;color:#6b7280;width:80px">센터</td><td style="padding:8px 0;color:#111;font-weight:600">${center_name}</td></tr>
-        <tr><td style="padding:8px 0;color:#6b7280">설비</td><td style="padding:8px 0;color:#111">${facility_id}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280">설비</td><td style="padding:8px 0;color:#111">${fid_name || facility_id}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280">점검자</td><td style="padding:8px 0;color:#111">${worker}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280">일시</td><td style="padding:8px 0;color:#111">${datetime}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280;vertical-align:top">내용</td>
@@ -129,6 +129,14 @@ exports.onInspectionLog = functions
     const photos      = after.photos      || "";
     const logDocId    = context.params.docId;
 
+    // facility_info에서 fid_name 조회
+    let fid_name = facility_id;
+    try {
+      const facDoc = await db.collection("center_configs")
+        .doc(center_name).collection("facilities").doc(facility_id).get();
+      if (facDoc.exists) fid_name = facDoc.data().fid_name || facility_id;
+    } catch(e) { console.warn("fid_name 조회 실패:", e); }
+
     console.log(`[이슈 생성] ${center_name} / ${facility_id} / memo: ${memo}`);
 
     // events 컬렉션에 이미 같은 로그로 만들어진 이슈가 있는지 확인 (중복 방지)
@@ -157,6 +165,7 @@ exports.onInspectionLog = functions
       // 기본 정보
       center_name:    center_name,
       facility_id:    facility_id,
+      fid_name:       fid_name,
       worker:         worker,
       memo:           memo,
       datetime:       datetime,
@@ -195,7 +204,7 @@ exports.onInspectionLog = functions
       `[이슈 발생] ${center_name} - ${facility_id} - ${memo}`,
       makeEmailHtml({
         title:      "🔴 새 이슈가 등록되었습니다",
-        center_name: center_name, facility_id: facility_id, worker, datetime,
+        center_name: center_name, facility_id: facility_id, fid_name: fid_name, worker, datetime,
         memo,
         actionUrl:  eventUrl,
       })
