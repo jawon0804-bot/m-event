@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>M-Engine</title>
+<title>M-Event</title>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -65,6 +65,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 /* ── 메인 탭 (이벤트/엑셀/사진) ── */
 .main-tabs {
   background: var(--navy2); display: flex; padding: 0 24px;
+  position: sticky; top: 52px; z-index: 99;
 }
 .main-tab {
   padding: 12px 20px; font-size: 14px; font-weight: 600; color: rgba(255,255,255,.6);
@@ -143,6 +144,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .filter-bar {
   background: #fff; border-bottom: 1px solid var(--gray2);
   padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  position: sticky; top: 98px; z-index: 98;
 }
 .filter-bar label  { font-size: 13px; color: var(--gray4); }
 .filter-bar select, .filter-bar input[type="date"] {
@@ -338,14 +340,15 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   .photo-grid-dash { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
 </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 
 <!-- 로그인 -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="logo">🔧</div>
-    <h1>M-Engine</h1>
+    <div class="logo">📝</div>
+    <h1>M-Event</h1>
     <p>로그인</p>
     <label>이름</label>
     <input type="text" id="login-name" placeholder="홍길동" autocomplete="name">
@@ -359,7 +362,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 <!-- 앱 -->
 <div id="app">
   <div class="header">
-    <h1>🔧 M-Engine</h1>
+    <h1>📝 M-Event</h1>
     <span class="user" id="header-user"></span>
     <button class="logout-btn" onclick="logout()">로그아웃</button>
   </div>
@@ -367,10 +370,10 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   <!-- 메인 탭 -->
   <div class="main-tabs">
     <div class="main-tab active" data-page="event" onclick="switchPage('event')">
-      📋 이벤트 <span class="badge" id="badge-active">0</span>
+      <i class="fa-solid fa-bell"></i> 이벤트 <span class="badge" id="badge-active">0</span>
     </div>
-    <div class="main-tab" data-page="excel" onclick="switchPage('excel')">📊 엑셀</div>
-    <div class="main-tab" data-page="photo" onclick="switchPage('photo')">📷 사진</div>
+    <div class="main-tab" data-page="excel" onclick="switchPage('excel')"><i class="fa-solid fa-file-excel"></i> 엑 셀</div>
+    <div class="main-tab" data-page="photo" onclick="switchPage('photo')"><i class="fa-solid fa-camera"></i> 사 진</div>
   </div>
 
   <!-- ── 이벤트 페이지 ── -->
@@ -408,7 +411,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
       <p>엑셀 목록 불러오는 중...</p>
     </div>
     <div id="excel-list">
-      <div class="empty-state"><div class="icon">📊</div><p>조회 버튼을 눌러 검색하세요.</p></div>
+      <div class="empty-state"><div class="icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div><p>조회 버튼을 눌러 검색하세요.</p></div>
     </div>
   </div>
 
@@ -736,7 +739,7 @@ async function loadEventPhotos(ev) {
   const count = parseInt((ev.photo_count||"0").replace(/[^0-9]/g,""));
   if (count === 0) { sec.style.display = "none"; return; }
   sec.style.display = "block";
-  grid.innerHTML = `<div class="photo-loading"><div style="width:18px;height:18px;border:2px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;margin-right:8px;vertical-align:middle"></div>사진 불러오는 중...</div>`;
+  grid.innerHTML = `<div class="photo-loading"><div style="width:32px;height:32px;border:3px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;margin-right:8px;vertical-align:middle"></div>사진 불러오는 중...</div>`;
   const dt         = (ev.datetime||"").replace(/[-: ]/g,"").slice(0,12);
   const facilityId = (ev.facility_id||"").replace(/\s/g,"_");
   const urls = [];
@@ -783,7 +786,7 @@ async function loadExcel() {
     if (end)    q = q.where("datetime","<=",end+"\uffff");
     const snap = await q.get();
     sp.classList.remove("show");
-    if (snap.empty) { el.innerHTML = `<div class="empty-state"><div class="icon">📊</div><p>해당 기간에 엑셀 파일이 없습니다.</p></div>`; return; }
+    if (snap.empty) { el.innerHTML = `<div class="empty-state"><div class="icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div><p>해당 기간에 엑셀 파일이 없습니다.</p></div>`; return; }
     const groups = {};
     snap.docs.forEach(d => {
       const data    = d.data();
@@ -798,7 +801,7 @@ async function loadExcel() {
       groups[month].forEach(item => {
         html += `
         <div class="excel-item">
-          <div class="excel-icon">📊</div>
+          <div class="excel-icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div>
           <div class="excel-info">
             <div class="excel-title">${esc(item.facility_id||"점검표")}</div>
             <div class="excel-meta">날짜: ${esc(item.datetime||"")}</div>
@@ -860,7 +863,7 @@ async function loadDashPhotos() {
         <div class="photo-group-body">
           <div class="photo-grid-dash" id="pgrid-${date}">
             <div style="color:var(--gray3);font-size:13px;display:flex;align-items:center;gap:8px">
-              <div style="width:18px;height:18px;border:2px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite"></div>로드 중...
+              <div style="width:32px;height:32px;border:3px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite"></div>로드 중...
             </div>
           </div>
         </div>`;
