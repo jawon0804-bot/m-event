@@ -12,7 +12,7 @@
   "hosting": [
     {
       "target": "main-site",
-      "public": "public",
+      "public": "manager",
       "ignore": [
         "firebase.json",
         "**/.*",
