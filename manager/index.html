@@ -842,7 +842,7 @@ async function loadExcel() {
         <div class="excel-item">
           <div class="excel-icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div>
           <div class="excel-info">
-            <div class="excel-title">${esc(sheetLabels[item.facility_id]||fidLocations[item.facility_id]||item.facility_id||"점검표")}</div>
+            <div class="excel-title">${(()=>{ const f=(item.facility_id||"").split(",")[0].trim(); return esc(sheetLabels[f]||fidLocations[f]||item.facility_id||"점검표"); })()}</div>
             <div class="excel-meta">날짜: ${esc(item.datetime||"")}</div>
             <div class="excel-center">${esc(item.center_name||"")}</div>
           </div>
