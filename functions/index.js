@@ -126,6 +126,7 @@ exports.onInspectionLog = functions
     const facility_id  = after.facility_id  || "";
     const worker      = after.worker      || "";
     const datetime    = after.datetime    || "";
+    const photos      = after.photos      || "";
     const logDocId    = context.params.docId;
 
     console.log(`[이슈 생성] ${center_name} / ${facility_id} / memo: ${memo}`);
@@ -143,6 +144,7 @@ exports.onInspectionLog = functions
       eventRef = existing.docs[0].ref;
       await eventRef.update({
         memo,
+        photos,
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
       });
       console.log("[이슈 업데이트] 기존 이슈 memo 수정:", eventRef.id);
@@ -158,6 +160,7 @@ exports.onInspectionLog = functions
       worker:         worker,
       memo:           memo,
       datetime:       datetime,
+      photos:         photos,
       source_log_id:  logDocId,
 
       // 상태
