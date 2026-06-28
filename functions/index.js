@@ -75,7 +75,7 @@ function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, date
   return `
   <div style="font-family:Apple SD Gothic Neo,맑은 고딕,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a5f;padding:20px 24px">
-      <h2 style="color:#fff;margin:0;font-size:18px">🔧 M-Engine 이벤트 알림</h2>
+      <h2 style="color:#fff;margin:0;font-size:18px">📝 M-Event 이벤트 알림</h2>
     </div>
     <div style="padding:24px">
       <h3 style="margin:0 0 16px;color:#111;font-size:16px">${title}</h3>
@@ -95,7 +95,7 @@ function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, date
       </div>` : ""}
     </div>
     <div style="background:#f9fafb;padding:12px 24px;font-size:12px;color:#9ca3af;text-align:center">
-      M-Engine 자동 발송 메일입니다.
+      M-Event 자동 발송 메일입니다.
     </div>
   </div>`;
 }
