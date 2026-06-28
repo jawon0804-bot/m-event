@@ -31,11 +31,11 @@ const getTransporter = () => nodemailer.createTransport({
 // ==============================================================================
 // [유틸] 센터 관리자 이메일 목록 조회
 // ==============================================================================
-async function getAdminEmails(centerName) {
+async function getAdminEmails(center_name) {
   try {
     const snap = await db.collection("UserDB")
       .where("grade", "==", "관리자")
-      .where("center", "in", [centerName, "Master"])
+      .where("center", "in", [center_name, "Master"])
       .get();
     return snap.docs
       .map(d => d.data().email)
@@ -71,7 +71,7 @@ async function sendMail(to, subject, html) {
 // ==============================================================================
 // [유틸] 이메일 HTML 템플릿
 // ==============================================================================
-function makeEmailHtml({ title, centerName, facilityId, worker, datetime, memo, actionUrl }) {
+function makeEmailHtml({ title, center_name, facility_id, worker, datetime, memo, actionUrl }) {
   return `
   <div style="font-family:Apple SD Gothic Neo,맑은 고딕,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a5f;padding:20px 24px">
@@ -80,8 +80,8 @@ function makeEmailHtml({ title, centerName, facilityId, worker, datetime, memo, 
     <div style="padding:24px">
       <h3 style="margin:0 0 16px;color:#111;font-size:16px">${title}</h3>
       <table style="width:100%;border-collapse:collapse;font-size:14px">
-        <tr><td style="padding:8px 0;color:#6b7280;width:80px">센터</td><td style="padding:8px 0;color:#111;font-weight:600">${centerName}</td></tr>
-        <tr><td style="padding:8px 0;color:#6b7280">설비</td><td style="padding:8px 0;color:#111">${facilityId}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;width:80px">센터</td><td style="padding:8px 0;color:#111;font-weight:600">${center_name}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280">설비</td><td style="padding:8px 0;color:#111">${facility_id}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280">점검자</td><td style="padding:8px 0;color:#111">${worker}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280">일시</td><td style="padding:8px 0;color:#111">${datetime}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280;vertical-align:top">내용</td>
@@ -122,13 +122,13 @@ exports.onInspectionLog = functions
     const prevMemo = (before?.memo || "").trim();
     if (memo === prevMemo) return null;
 
-    const centerName  = after.center_name  || "";
-    const facilityId  = after.facility_id  || "";
+    const center_name  = after.center_name  || "";
+    const facility_id  = after.facility_id  || "";
     const worker      = after.worker      || "";
     const datetime    = after.datetime    || "";
     const logDocId    = context.params.docId;
 
-    console.log(`[이슈 생성] ${centerName} / ${facilityId} / memo: ${memo}`);
+    console.log(`[이슈 생성] ${center_name} / ${facility_id} / memo: ${memo}`);
 
     // events 컬렉션에 이미 같은 로그로 만들어진 이슈가 있는지 확인 (중복 방지)
     const existing = await db.collection("events")
@@ -153,8 +153,8 @@ exports.onInspectionLog = functions
     eventRef = db.collection("events").doc();
     await eventRef.set({
       // 기본 정보
-      center_name:    centerName,
-      facility_id:    facilityId,
+      center_name:    center_name,
+      facility_id:    facility_id,
       worker:         worker,
       memo:           memo,
       datetime:       datetime,
@@ -184,15 +184,15 @@ exports.onInspectionLog = functions
     console.log("[이슈 생성 완료]", eventRef.id);
 
     // 관리자 메일 발송
-    const adminEmails = await getAdminEmails(centerName);
+    const adminEmails = await getAdminEmails(center_name);
     const eventUrl = `https://m-smart-0804.web.app/index.html?id=${eventRef.id}`;
 
     await sendMail(
       adminEmails,
-      `[이슈 발생] ${centerName} - ${facilityId} - ${memo}`,
+      `[이슈 발생] ${center_name} - ${facility_id} - ${memo}`,
       makeEmailHtml({
         title:      "🔴 새 이슈가 등록되었습니다",
-        centerName, facilityId, worker, datetime,
+        center_name: center_name, facility_id: facility_id, worker, datetime,
         memo,
         actionUrl:  eventUrl,
       })
@@ -217,14 +217,14 @@ exports.onIssueUpdate = functions
     // 상태 변경 없으면 스킵
     if (before.status === after.status) return null;
 
-    const centerName = after.center_name  || "";
-    const facilityId = after.facility_id  || "";
+    const center_name = after.center_name  || "";
+    const facility_id = after.facility_id  || "";
     const memo       = after.memo         || "";
     const datetime   = after.datetime     || "";
     const eventId    = context.params.eventId;
     const eventUrl   = `https://m-smart-0804.web.app/index.html?id=${eventId}`;
 
-    const adminEmails = await getAdminEmails(centerName);
+    const adminEmails = await getAdminEmails(center_name);
 
     // 마지막 이력 항목 (방금 추가된 조치/완료 내용)
     const lastHistory = (after.history || []).slice(-1)[0] || {};
@@ -232,10 +232,10 @@ exports.onIssueUpdate = functions
     if (after.status === "조치중") {
       await sendMail(
         adminEmails,
-        `[조치 진행] ${centerName} - ${facilityId} - ${memo}`,
+        `[조치 진행] ${center_name} - ${facility_id} - ${memo}`,
         makeEmailHtml({
           title:      "🟡 이슈 조치가 시작되었습니다",
-          centerName, facilityId,
+          center_name: center_name, facility_id: facility_id,
           worker:     lastHistory.by  || "",
           datetime,
           memo:       lastHistory.content || "",
@@ -245,10 +245,10 @@ exports.onIssueUpdate = functions
     } else if (after.status === "완료") {
       await sendMail(
         adminEmails,
-        `[이슈 완료] ${centerName} - ${facilityId} - ${memo}`,
+        `[이슈 완료] ${center_name} - ${facility_id} - ${memo}`,
         makeEmailHtml({
           title:      "🟢 이슈가 완료 처리되었습니다",
-          centerName, facilityId,
+          center_name: center_name, facility_id: facility_id,
           worker:     lastHistory.by  || "",
           datetime,
           memo:       lastHistory.content || "",
@@ -287,21 +287,21 @@ exports.issueReminderScheduler = functions
 
     for (const doc of snap.docs) {
       const issue    = doc.data();
-      const centerName  = issue.center_name || "";
-      const facilityId  = issue.facility_id || "";
+      const center_name  = issue.center_name || "";
+      const facility_id  = issue.facility_id || "";
       const memo        = issue.memo        || "";
       const status      = issue.status      || "";
       const count       = (issue.notified_count || 0) + 1;
       const eventUrl    = `https://m-smart-0804.web.app/index.html?id=${doc.id}`;
 
-      const adminEmails = await getAdminEmails(centerName);
+      const adminEmails = await getAdminEmails(center_name);
 
       await sendMail(
         adminEmails,
-        `[${count}차 미조치 알림] ${centerName} - ${facilityId} - ${memo}`,
+        `[${count}차 미조치 알림] ${center_name} - ${facility_id} - ${memo}`,
         makeEmailHtml({
           title:      `⚠️ 미처리 이슈 ${count}차 알림 (현재 상태: ${status})`,
-          centerName, facilityId,
+          center_name: center_name, facility_id: facility_id,
           worker:     issue.worker   || "",
           datetime:   issue.datetime || "",
           memo:       `${memo}\n\n※ 이 이슈는 3일 이상 처리되지 않아 재알림이 발송됩니다.`,
