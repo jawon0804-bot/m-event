@@ -75,7 +75,7 @@ function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, date
   return `
   <div style="font-family:Apple SD Gothic Neo,맑은 고딕,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a5f;padding:20px 24px">
-      <h2 style="color:#fff;margin:0;font-size:18px">🔧 M-Engine 이슈 알림</h2>
+      <h2 style="color:#fff;margin:0;font-size:18px">🔧 M-Engine 이벤트 알림</h2>
     </div>
     <div style="padding:24px">
       <h3 style="margin:0 0 16px;color:#111;font-size:16px">${title}</h3>
@@ -90,7 +90,7 @@ function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, date
       ${actionUrl ? `
       <div style="margin-top:24px;text-align:center">
         <a href="${actionUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">
-          이슈 트래커에서 확인하기 →
+          이벤트 트래커에서 확인하기 →
         </a>
       </div>` : ""}
     </div>
@@ -201,9 +201,9 @@ exports.onInspectionLog = functions
 
     await sendMail(
       adminEmails,
-      `[이슈 발생] ${center_name} - ${facility_id} - ${memo}`,
+      `[이벤트 발생] ${center_name} - ${facility_id} - ${memo}`,
       makeEmailHtml({
-        title:      "🔴 새 이슈가 등록되었습니다",
+        title:      "🔴 새 이벤트가 등록되었습니다",
         center_name: center_name, facility_id: facility_id, fid_name: fid_name, worker, datetime,
         memo,
         actionUrl:  eventUrl,
@@ -246,7 +246,7 @@ exports.onIssueUpdate = functions
         adminEmails,
         `[조치 진행] ${center_name} - ${facility_id} - ${memo}`,
         makeEmailHtml({
-          title:      "🟡 이슈 조치가 시작되었습니다",
+          title:      "🟡 이벤트 조치가 시작되었습니다",
           center_name: center_name, facility_id: facility_id,
           worker:     lastHistory.by  || "",
           datetime,
@@ -257,9 +257,9 @@ exports.onIssueUpdate = functions
     } else if (after.status === "완료") {
       await sendMail(
         adminEmails,
-        `[이슈 완료] ${center_name} - ${facility_id} - ${memo}`,
+        `[이벤트 완료] ${center_name} - ${facility_id} - ${memo}`,
         makeEmailHtml({
-          title:      "🟢 이슈가 완료 처리되었습니다",
+          title:      "🟢 이벤트가 완료 처리되었습니다",
           center_name: center_name, facility_id: facility_id,
           worker:     lastHistory.by  || "",
           datetime,
@@ -312,7 +312,7 @@ exports.issueReminderScheduler = functions
         adminEmails,
         `[${count}차 미조치 알림] ${center_name} - ${facility_id} - ${memo}`,
         makeEmailHtml({
-          title:      `⚠️ 미처리 이슈 ${count}차 알림 (현재 상태: ${status})`,
+          title:      `⚠️ 미처리 이벤트 ${count}차 알림 (현재 상태: ${status})`,
           center_name: center_name, facility_id: facility_id,
           worker:     issue.worker   || "",
           datetime:   issue.datetime || "",
