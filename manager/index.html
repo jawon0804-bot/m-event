@@ -569,7 +569,7 @@ document.addEventListener("keydown", e => {
 // ──────────────────────────────────────────────
 // 앱 초기화
 // ──────────────────────────────────────────────
-async async function loadFidLocations() {
+async function loadFidLocations() {
   try {
     const center = currentUser.center_name === "Master" ? "Master" : currentUser.center_name;
     const res = await fetch(`${DASHBOARD_API}/api/fidlocations?center=${encodeURIComponent(center)}`);
@@ -578,7 +578,7 @@ async async function loadFidLocations() {
   } catch(e) { console.warn("fidLocations 로드 실패:", e); }
 }
 
-function showApp() {
+async function showApp() {
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app").style.display          = "flex";
   const centerLabel = currentUser.center_name === "Master" ? "마스터 (전체)" : currentUser.center_name;
