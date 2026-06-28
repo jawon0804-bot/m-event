@@ -54,8 +54,8 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   display: flex; align-items: center; height: 56px; gap: 16px;
   position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2);
 }
-.header h1    { font-size: 17px; font-weight: 700; flex: 1; }
-.header .user { font-size: 13px; color: rgba(255,255,255,.7); }
+.header h1    { font-size: 22px; font-weight: 800; flex: 1; letter-spacing: -0.5px; }
+.header .user { font-size: 11px; color: rgba(255,255,255,.6); }
 .logout-btn {
   background: rgba(255,255,255,.15); border: none; color: #fff;
   padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer;
@@ -210,17 +210,17 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   background: #fff; padding: 16px 24px; border-bottom: 1px solid var(--gray2);
 }
 .photo-grid-dash {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+  display: flex; flex-direction: column; gap: 0;
 }
-.photo-card { display: flex; flex-direction: column; gap: 6px; }
+.photo-card { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--gray2); background: #fff; }
 .photo-thumb-dash {
-  width: 100%; aspect-ratio: 4/3; object-fit: cover;
+  width: 70px; height: 70px; object-fit: cover; flex-shrink: 0;
   border-radius: 8px; border: 1px solid var(--gray2);
   cursor: pointer; transition: opacity .15s;
 }
 .photo-thumb-dash:hover { opacity: .85; }
-.photo-name     { font-size: 11px; color: var(--gray4); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.photo-facility { font-size: 12px; color: var(--navy); font-weight: 600; text-align: center; }
+.photo-name     { font-size: 11px; color: var(--gray4); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-facility { font-size: 13px; color: var(--navy); font-weight: 600; text-align: left; }
 .photo-dl {
   display: flex; align-items: center; justify-content: center; gap: 4px;
   background: var(--blue); color: #fff; border: none; border-radius: 4px;
@@ -315,6 +315,12 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .btn-done:hover { background: #15803d; }
 .completed-msg { text-align: center; padding: 16px; color: var(--green); font-weight: 600; }
 
+/* ── 페이지네이션 ── */
+.pagination { display: flex; justify-content: center; gap: 6px; padding: 16px; flex-wrap: wrap; }
+.page-btn { min-width: 34px; height: 34px; border: 1px solid var(--gray2); border-radius: 6px; background: #fff; color: var(--navy); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.page-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); font-weight: 700; }
+.page-btn:hover:not(.active) { background: var(--gray1); }
+
 /* 사진 뷰어 */
 .viewer-overlay {
   display: none; position: fixed; inset: 0; background: rgba(0,0,0,.92);
@@ -337,7 +343,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   .event-meta { min-width: unset; }
   .modal { border-radius: 12px 12px 0 0; }
   .modal-overlay { padding: 60px 0 0; align-items: flex-end; }
-  .photo-grid-dash { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  .photo-grid-dash { flex-direction: column; }
 }
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -393,6 +399,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     <div class="event-list" id="event-list">
       <div class="empty-state"><div class="icon">⏳</div><p>데이터 불러오는 중...</p></div>
     </div>
+    <div class="pagination" id="pagination-event"></div>
   </div>
 
   <!-- ── 엑셀 페이지 ── -->
@@ -413,6 +420,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     <div id="excel-list">
       <div class="empty-state"><div class="icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div><p>조회 버튼을 눌러 검색하세요.</p></div>
     </div>
+    <div class="pagination" id="pagination-excel"></div>
   </div>
 
   <!-- ── 사진 페이지 ── -->
@@ -459,6 +467,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     <div class="timeline" id="modal-timeline"></div>
     <div class="modal-action" id="modal-action"></div>
   </div>
+    <div class="pagination" id="pagination-photo"></div>
 </div>
 
 <!-- 사진 원본 뷰어 -->
@@ -622,7 +631,9 @@ function renderList() {
     </div>`;
     return;
   }
-  el.innerHTML = filtered.map(ev => {
+  const total = filtered.length;
+  const paged = filtered.slice((eventPage-1)*PAGE_SIZE, eventPage*PAGE_SIZE);
+  el.innerHTML = paged.map(ev => {
     const lastAction = (ev.history||[]).slice(-1)[0];
     const hasPhoto   = ev.photo_count > 0;
     return `
@@ -644,7 +655,9 @@ function renderList() {
       </div>
     </div>`;
   }).join("");
+  renderPagination("pagination-event", total, eventPage, "goEventPage");
 }
+function goEventPage(p) { eventPage = p; renderList(); window.scrollTo(0,0); }
 
 function updateBadge() {
   const count = allEvents.filter(e => e.status !== "완료").length;
@@ -812,12 +825,14 @@ async function loadExcel() {
       });
     });
     el.innerHTML = html;
+    renderPagination("pagination-excel", Object.keys(groups).length, excelPage, "goExcelPage");
   } catch(e) {
     sp.classList.remove("show");
     console.error(e);
     el.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>데이터를 불러오는 중 오류가 발생했습니다.</p></div>`;
   }
 }
+function goExcelPage(p) { excelPage = p; loadExcel(); window.scrollTo(0,0); }
 
 // ──────────────────────────────────────────────
 // 사진 로드
@@ -889,19 +904,25 @@ async function loadPhotoGroup(date, items) {
       const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;
       try {
         const url = await storage.ref(`inspection_photos/${item.center_name}/${fileName}`).getDownloadURL();
-        cards.push({ url, fileName, facilityId: item.facility_id, datetime: item.datetime });
+        cards.push({ url, fileName, facilityId: item.facility_id, fid_name: item.fid_name||item.facility_id, datetime: item.datetime });
       } catch(e) { if (e.code !== "storage/object-not-found") console.warn(fileName, e.code); }
     }
   }
   if (cards.length === 0) { grid.innerHTML = `<div style="color:var(--gray3);font-size:13px">사진을 불러올 수 없습니다.</div>`; return; }
-  grid.innerHTML = cards.map(({ url, fileName, facilityId, datetime }) => `
+  grid.innerHTML = cards.map(({ url, fileName, facilityId, fid_name, datetime }) => `
     <div class="photo-card">
-      <img class="photo-thumb-dash" src="${url}" alt="${esc(facilityId)}" onclick="openViewer('${url}','${esc(fileName)}','${esc(facilityId)}')">
-      <div class="photo-facility">${esc(facilityId)}</div>
-      <div class="photo-name">${esc(datetime||"")}</div>
+      <img class="photo-thumb-dash" src="${url}" alt="${esc(fid_name||facilityId)}"
+           onclick="openViewer('${url}','${esc(fileName)}','${esc(fid_name||facilityId)}')"
+           onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0;">
+        <div class="photo-facility">${esc(fid_name||facilityId)}</div>
+        <div class="photo-name">${esc(datetime||"")}</div>
+      </div>
       <a class="photo-dl" href="${url}" download="${esc(fileName)}" target="_blank">⬇ 다운로드</a>
     </div>`).join("");
 }
+
+function goPhotoPage(p) { photoPage = p; loadDashPhotos(); window.scrollTo(0,0); }
 
 function openViewer(url, fileName, facilityId) {
   document.getElementById("viewer-img").src     = url;
@@ -914,6 +935,28 @@ function handleViewerClick(e) { if (e.target===document.getElementById("viewer")
 function closeViewer() {
   document.getElementById("viewer").classList.remove("open");
   document.getElementById("viewer-img").src = "";
+}
+
+// ── 페이지네이션 ──
+const PAGE_SIZE = 30;
+let eventPage = 1, excelPage = 1, photoPage = 1;
+
+function renderPagination(containerId, total, current, onPageClick) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) { el.innerHTML = ""; return; }
+  let html = "";
+  if (current > 1) html += `<button class="page-btn" onclick="${onPageClick}(${current-1})">‹</button>`;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - current) <= 2) {
+      html += `<button class="page-btn${i===current?" active":""}" onclick="${onPageClick}(${i})">${i}</button>`;
+    } else if (Math.abs(i - current) === 3) {
+      html += `<span style="padding:0 4px">...</span>`;
+    }
+  }
+  if (current < totalPages) html += `<button class="page-btn" onclick="${onPageClick}(${current+1})">›</button>`;
+  el.innerHTML = html;
 }
 
 // ── 유틸 ──
