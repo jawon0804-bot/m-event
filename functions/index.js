@@ -23,8 +23,8 @@ const db = admin.firestore();
 const getTransporter = () => nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,
+    user: functions.config().gmail.user,
+    pass: functions.config().gmail.pass,
   },
 });
 
@@ -57,7 +57,7 @@ async function sendMail(to, subject, html) {
   try {
     const transporter = getTransporter();
     await transporter.sendMail({
-      from: `"M-Engine 알림" <${process.env.GMAIL_USER}>`,
+      from: `"M-Engine 알림" <${functions.config().gmail.user}>`,
       to: Array.isArray(to) ? to.join(", ") : to,
       subject,
       html,
