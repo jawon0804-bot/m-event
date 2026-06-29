@@ -349,6 +349,47 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   padding: 8px 16px; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer;
 }
 
+/* ══════════════════════════════════
+   보고서 페이지
+══════════════════════════════════ */
+.report-wrap {
+  max-width: 600px; margin: 40px auto; padding: 0 24px;
+}
+.report-card {
+  background: #fff; border-radius: 12px; padding: 28px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 20px;
+}
+.report-card h3 {
+  font-size: 16px; font-weight: 700; color: var(--navy);
+  margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+}
+.report-card p {
+  font-size: 13px; color: var(--gray4); margin-bottom: 20px; line-height: 1.6;
+}
+.report-filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.report-filters label { font-size: 12px; color: var(--gray4); font-weight: 600; margin-bottom: 4px; display: block; }
+.report-filters select,
+.report-filters input[type="date"] {
+  width: 100%; border: 1px solid var(--gray2); border-radius: 6px;
+  padding: 9px 12px; font-size: 14px; outline: none;
+  background: var(--gray0); color: var(--text);
+}
+.report-filters select:focus,
+.report-filters input:focus { border-color: var(--navy2); }
+.report-row { display: flex; gap: 12px; }
+.report-row > div { flex: 1; }
+.report-dl-btn {
+  width: 100%; background: var(--green); color: #fff; border: none;
+  border-radius: 8px; padding: 13px; font-size: 15px; font-weight: 700;
+  cursor: not-allowed; opacity: 0.5;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.coming-soon {
+  text-align: center; padding: 12px;
+  font-size: 12px; color: var(--gray3);
+  background: var(--gray1); border-radius: 6px; margin-top: 10px;
+}
+
 @media (max-width: 600px) {
   .event-meta { min-width: unset; }
   .modal { border-radius: 12px 12px 0 0; }
@@ -393,6 +434,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     </div>
     <div class="main-tab" data-page="excel" onclick="switchPage('excel')"><i class="fa-solid fa-file-excel"></i> 엑 셀</div>
     <div class="main-tab" data-page="photo" onclick="switchPage('photo')"><i class="fa-solid fa-camera"></i> 사 진</div>
+    <div class="main-tab" data-page="report" onclick="switchPage('report')"><i class="fa-solid fa-file-lines"></i> 보고서</div>
   </div>
 
   <!-- ── 이벤트 페이지 ── -->
@@ -453,6 +495,47 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     </div>
     <div id="photo-list">
       <div class="empty-state"><div class="icon">📷</div><p>조회 버튼을 눌러 검색하세요.</p></div>
+    </div>
+  </div>
+
+  <!-- ── 보고서 페이지 ── -->
+  <div class="page" id="page-report">
+    <div class="report-wrap">
+      <div class="report-card">
+        <h3><i class="fa-solid fa-file-lines" style="color:var(--navy)"></i> 이벤트 보고서</h3>
+        <p>기간 내 이벤트 발생 및 조치 완료 내역을 엑셀 파일로 다운로드합니다.<br>양식 준비 중입니다.</p>
+        <div class="report-filters">
+          <div class="report-row">
+            <div>
+              <label>센터</label>
+              <select id="filter-center-report"></select>
+            </div>
+            <div>
+              <label>상태</label>
+              <select id="filter-status-report">
+                <option value="">전체</option>
+                <option value="발생">발생</option>
+                <option value="조치중">조치중</option>
+                <option value="완료">완료</option>
+              </select>
+            </div>
+          </div>
+          <div class="report-row">
+            <div>
+              <label>시작일</label>
+              <input type="date" id="filter-start-report">
+            </div>
+            <div>
+              <label>종료일</label>
+              <input type="date" id="filter-end-report">
+            </div>
+          </div>
+        </div>
+        <button class="report-dl-btn" disabled>
+          <i class="fa-solid fa-file-excel"></i> 엑셀 다운로드
+        </button>
+        <div class="coming-soon">🚧 양식 확정 후 기능이 활성화됩니다.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -558,7 +641,7 @@ window.onload = () => {
   if (saved) { currentUser = JSON.parse(saved); showApp(); }
   const today    = new Date();
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  ["excel","photo"].forEach(k => {
+  ["excel","photo","report"].forEach(k => {
     document.getElementById(`filter-start-${k}`).value = fmt(firstDay);
     document.getElementById(`filter-end-${k}`).value   = fmt(today);
   });
@@ -591,7 +674,7 @@ async function showApp() {
 
 async function buildCenterFilters() {
   const isMaster = currentUser.center_name === "Master";
-  for (const k of ["excel","photo"]) {
+  for (const k of ["excel","photo","report"]) {
     const sel = document.getElementById(`filter-center-${k}`);
     if (!isMaster) {
       sel.innerHTML = `<option value="${esc(currentUser.center_name)}">${esc(currentUser.center_name)}</option>`;
@@ -646,7 +729,7 @@ function renderList() {
     const matchTab = isActive ? ev.status !== "완료" : ev.status === "완료";
     if (!matchTab) return false;
     if (!keyword) return true;
-    return [ev.memo, ev.facility_id, ev.worker, ev.center_name]
+    return [ev.memo, ev.facility_id, ev.fid_name, sheetLabels[ev.facility_id], ev.worker, ev.center_name]
       .some(v => (v||"").toLowerCase().includes(keyword));
   });
   const el = document.getElementById("event-list");
