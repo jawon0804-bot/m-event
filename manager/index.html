@@ -730,8 +730,7 @@ function renderList() {
     if (!matchTab) return false;
     if (!keyword) return true;
     const firstFid = (ev.facility_id||"").split(",")[0].trim();
-    const fidLabel = sheetLabels[firstFid] || "";
-    return [ev.memo, ev.facility_id, ev.fid_name, fidLabel, ev.worker, ev.center_name]
+    return [ev.memo, ev.facility_id, ev.fid_name, ev.worker, ev.center_name]
       .some(v => (v||"").toLowerCase().includes(keyword));
   });
   const el = document.getElementById("event-list");
