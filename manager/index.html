@@ -709,6 +709,7 @@ async function buildCenterFilters() {
       sel.innerHTML = `<option value="${esc(currentUser.center_name)}">${esc(currentUser.center_name)}</option>`;
       sel.disabled  = true;
     } else {
+      sel.disabled = false;
       try {
         const snap   = await db.collection("center_configs").get();
         const centers = snap.docs.map(d => d.id).sort();
