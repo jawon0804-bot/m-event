@@ -676,7 +676,7 @@ async function showApp() {
   document.getElementById("header-user").textContent = `${currentUser.name} · ${centerLabel}`;
 
   // 보고서 탭 관리자/Master만 표시
-  const isAdminOrMaster = currentUser.grade === "관리자" || currentUser.center_name === "Master";
+  const isAdminOrMaster = currentUser.active === true || currentUser.center_name === "Master";
   document.getElementById("tab-report").style.display = isAdminOrMaster ? "flex" : "none";
 
   await buildCenterFilters();
