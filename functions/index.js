@@ -13,6 +13,7 @@
  */
 
 const functions = require("firebase-functions");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
@@ -280,12 +281,9 @@ exports.onIssueUpdate = functions
 // [스케줄] 3일 경과 이슈 알림 (매일 09:00)
 // 완료되지 않은 이슈 중 last_notified_at이 3일 이상 지난 것들에 재알림
 // ==============================================================================
-exports.issueReminderScheduler = functions
-  .region("asia-northeast3")
-  .pubsub
-  .schedule("0 9 * * *")
-  .timeZone("Asia/Seoul")
-  .onRun(async () => {
+exports.issueReminderScheduler = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "Asia/Seoul", region: "asia-northeast3" },
+  async () => {
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     const threshold = admin.firestore.Timestamp.fromDate(threeDaysAgo);
