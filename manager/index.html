@@ -660,9 +660,10 @@ document.addEventListener("keydown", e => {
 // ──────────────────────────────────────────────
 // 앱 초기화
 // ──────────────────────────────────────────────
-async function loadFidLocations() {
+async function loadFidLocations(centerOverride) {
   try {
-    const center = currentUser.center_name === "Master" ? "Master" : currentUser.center_name;
+    const center = centerOverride || (currentUser.center_name === "Master" ? "" : currentUser.center_name);
+    if (!center) return;
     const res = await fetch(`${DASHBOARD_API}/api/fidlocations?center=${encodeURIComponent(center)}`);
     const data = await res.json();
     if (data.ok) { fidLocations = data.fidLocations || {}; sheetLabels = data.sheetLabels || {}; }
@@ -742,6 +743,11 @@ function subscribeEvents() {
   const cutoff = firebase.firestore.Timestamp.fromDate(ninetyDaysAgo);
 
   const selectedCenter = document.getElementById("filter-center-event")?.value || "";
+
+  // Master가 센터 선택하면 해당 센터 sheetLabels 로드
+  if (currentUser.center_name === "Master" && selectedCenter) {
+    loadFidLocations(selectedCenter);
+  }
 
   let q = db.collection("events")
     .orderBy("created_at", "desc")
