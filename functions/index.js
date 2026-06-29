@@ -13,11 +13,6 @@
  */
 
 const functions = require("firebase-functions");
-const { defineString } = require("firebase-functions/params");
-
-// 환경변수 선언 (.env 파일 또는 Firebase 콘솔에서 설정)
-const GMAIL_USER = defineString("GMAIL_USER");
-const GMAIL_PASS = defineString("GMAIL_PASS");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
@@ -28,8 +23,8 @@ const db = admin.firestore();
 const getTransporter = () => nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: GMAIL_USER.value(),
-    pass: GMAIL_PASS.value(),
+    user: functions.config().gmail.user,
+    pass: functions.config().gmail.pass,
   },
 });
 
@@ -62,7 +57,7 @@ async function sendMail(to, subject, html) {
   try {
     const transporter = getTransporter();
     await transporter.sendMail({
-      from: `"M-Engine 알림" <${GMAIL_USER.value()}>`,
+      from: `"M-Engine 알림" <${functions.config().gmail.user}>`,
       to: Array.isArray(to) ? to.join(", ") : to,
       subject,
       html,
@@ -134,12 +129,15 @@ exports.onInspectionLog = functions
     const photos      = after.photos      || "";
     const logDocId    = context.params.docId;
 
-    // facility_info에서 fid_name 조회
+    // facility_info에서 fid_name 조회 (facility_id가 여러 개일 경우 첫 번째 값으로 조회)
     let fid_name = facility_id;
     try {
-      const facDoc = await db.collection("center_configs")
-        .doc(center_name).collection("facilities").doc(facility_id).get();
-      if (facDoc.exists) fid_name = facDoc.data().fid_name || facility_id;
+      const firstFid = (facility_id || "").split(",")[0].trim();
+      if (firstFid) {
+        const facDoc = await db.collection("center_configs")
+          .doc(center_name).collection("facilities").doc(firstFid).get();
+        if (facDoc.exists) fid_name = facDoc.data().fid_name || facility_id;
+      }
     } catch(e) { console.warn("fid_name 조회 실패:", e); }
 
     console.log(`[이슈 생성] ${center_name} / ${facility_id} / memo: ${memo}`);
