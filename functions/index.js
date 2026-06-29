@@ -13,6 +13,11 @@
  */
 
 const functions = require("firebase-functions");
+const { defineString } = require("firebase-functions/params");
+
+// 환경변수 선언 (.env 파일 또는 Firebase 콘솔에서 설정)
+const GMAIL_USER = defineString("GMAIL_USER");
+const GMAIL_PASS = defineString("GMAIL_PASS");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
@@ -23,8 +28,8 @@ const db = admin.firestore();
 const getTransporter = () => nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: functions.config().gmail.user,
-    pass: functions.config().gmail.pass,
+    user: GMAIL_USER.value(),
+    pass: GMAIL_PASS.value(),
   },
 });
 
@@ -57,7 +62,7 @@ async function sendMail(to, subject, html) {
   try {
     const transporter = getTransporter();
     await transporter.sendMail({
-      from: `"M-Engine 알림" <${functions.config().gmail.user}>`,
+      from: `"M-Engine 알림" <${GMAIL_USER.value()}>`,
       to: Array.isArray(to) ? to.join(", ") : to,
       subject,
       html,
