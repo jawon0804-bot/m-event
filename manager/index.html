@@ -730,7 +730,8 @@ function renderList() {
     if (!matchTab) return false;
     if (!keyword) return true;
     const firstFid = (ev.facility_id||"").split(",")[0].trim();
-    return [ev.memo, ev.facility_id, ev.fid_name, ev.worker, ev.center_name]
+    const fidLabel = sheetLabels[firstFid] || "";
+    return [ev.memo, ev.facility_id, ev.fid_name, fidLabel, ev.worker, ev.center_name]
       .some(v => (v||"").toLowerCase().includes(keyword));
   });
   const el = document.getElementById("event-list");
@@ -751,7 +752,7 @@ function renderList() {
       <div class="status-dot ${ev.status}"></div>
       <div class="event-meta">
         <div class="event-center">${esc(ev.center_name||"")}</div>
-        <div class="event-facility">${esc(sheetLabels[ev.facility_id]||ev.fid_name||ev.facility_id||"")}</div>
+        <div class="event-facility">${esc(ev.fid_name||ev.facility_id||"")}</div>
       </div>
       <div class="event-body">
         <div class="event-memo">${esc(ev.memo||"")}</div>
@@ -785,7 +786,7 @@ function openModal(eventId) {
   document.getElementById("modal-dot").className        = `status-dot ${currentEvent.status}`;
   document.getElementById("modal-title-text").textContent = currentEvent.memo || "";
   document.getElementById("m-center").textContent       = currentEvent.center_name  || "";
-  document.getElementById("m-facility").textContent     = sheetLabels[currentEvent.facility_id] || currentEvent.fid_name || currentEvent.facility_id  || "";
+  document.getElementById("m-facility").textContent     = currentEvent.fid_name || currentEvent.facility_id  || "";
   document.getElementById("m-worker").textContent       = currentEvent.worker        || "";
   document.getElementById("m-datetime").textContent     = currentEvent.datetime      || "";
   loadEventPhotos(currentEvent);
