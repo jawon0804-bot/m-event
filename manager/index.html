@@ -744,9 +744,9 @@ function subscribeEvents() {
 
   const selectedCenter = document.getElementById("filter-center-event")?.value || "";
 
-  // Master가 센터 선택하면 해당 센터 sheetLabels 로드
+  // Master가 센터 선택하면 해당 센터 sheetLabels 로드 후 재렌더링
   if (currentUser.center_name === "Master" && selectedCenter) {
-    loadFidLocations(selectedCenter);
+    loadFidLocations(selectedCenter).then(() => renderList());
   }
 
   let q = db.collection("events")
@@ -949,6 +949,11 @@ function closeEventViewer() {
 // ──────────────────────────────────────────────
 async function loadExcel() {
   const center = document.getElementById("filter-center-excel").value || (currentUser.center_name !== "Master" ? currentUser.center_name : "");
+
+  // Master가 센터 선택하면 해당 센터 sheetLabels 로드
+  if (currentUser.center_name === "Master" && center) {
+    await loadFidLocations(center);
+  }
   const start  = document.getElementById("filter-start-excel").value;
   const end    = document.getElementById("filter-end-excel").value;
 
@@ -1010,6 +1015,11 @@ function goExcelPage(p) { excelPage = p; loadExcel(); window.scrollTo(0,0); }
 // ──────────────────────────────────────────────
 async function loadDashPhotos() {
   const center = document.getElementById("filter-center-photo").value || (currentUser.center_name !== "Master" ? currentUser.center_name : "");
+
+  // Master가 센터 선택하면 해당 센터 sheetLabels 로드
+  if (currentUser.center_name === "Master" && center) {
+    await loadFidLocations(center);
+  }
   const start  = document.getElementById("filter-start-photo").value;
   const end    = document.getElementById("filter-end-photo").value;
 
