@@ -729,7 +729,9 @@ function renderList() {
     const matchTab = isActive ? ev.status !== "완료" : ev.status === "완료";
     if (!matchTab) return false;
     if (!keyword) return true;
-    return [ev.memo, ev.facility_id, ev.fid_name, sheetLabels[ev.facility_id], ev.worker, ev.center_name]
+    const firstFid = (ev.facility_id||"").split(",")[0].trim();
+    const fidLabel = sheetLabels[firstFid] || "";
+    return [ev.memo, ev.facility_id, ev.fid_name, fidLabel, ev.worker, ev.center_name]
       .some(v => (v||"").toLowerCase().includes(keyword));
   });
   const el = document.getElementById("event-list");
