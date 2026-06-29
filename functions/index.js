@@ -34,7 +34,7 @@ const getTransporter = () => nodemailer.createTransport({
 async function getAdminEmails(center_name) {
   try {
     const snap = await db.collection("UserDB")
-      .where("grade", "==", "관리자")
+      .where("active", "==", true)
       .where("center_name", "in", [center_name, "Master"])
       .get();
     return snap.docs
