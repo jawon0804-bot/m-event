@@ -626,7 +626,7 @@ async function login() {
     if (snap.empty) { errEl.textContent = "등록되지 않은 이름입니다."; return; }
     const matched = snap.docs.find(d => {
       const p = (d.data().phone || "").replace(/[^0-9]/g,"");
-      return p === phone || p.endsWith(phone.slice(-4));
+      return p === phone;
     });
     if (!matched) { errEl.textContent = "전화번호가 일치하지 않습니다."; return; }
     currentUser = matched.data();
