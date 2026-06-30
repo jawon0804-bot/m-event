@@ -57,7 +57,7 @@ async function sendMail(to, subject, html) {
   try {
     const transporter = getTransporter();
     await transporter.sendMail({
-      from: `"M-Engine 알림" <${functions.config().gmail.user}>`,
+      from: `"M-Event 알림" <${functions.config().gmail.user}>`,
       to: Array.isArray(to) ? to.join(", ") : to,
       subject,
       html,
@@ -75,7 +75,7 @@ function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, date
   return `
   <div style="font-family:Apple SD Gothic Neo,맑은 고딕,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a5f;padding:20px 24px">
-      <h2 style="color:#fff;margin:0;font-size:18px">📝 M-Event 이벤트 알림</h2>
+      <h2 style="color:#fff;margin:0;font-size:18px">📝 M-Event 알림</h2>
     </div>
     <div style="padding:24px">
       <h3 style="margin:0 0 16px;color:#111;font-size:16px">${title}</h3>
