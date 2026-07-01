@@ -3,7 +3,7 @@
  * 
  * [트리거] inspection_logs 문서 생성/수정 시 memo 필드 감지
  *          → events 컬렉션에 이벤트 생성
- *          → 해당 센터 관리자에게 이메일 발송
+ *          → 해당 센터 관리자에게 이메일 발송.
  * 
  * [배포]
  *   firebase deploy --only functions
