@@ -135,9 +135,9 @@ const isAdminOrMaster = currentUser.active === true || currentUser.center_name =
 
 ### 📬 누가 메일을 받나요?
 ```js
-center_name: "in" [해당 센터명, "Master"]
+center_name: "in" [해당 센터명]
 ```
-그 센터 소속 관리자(`active: true`) **또는** 전체 관리자(`center_name: "Master"`)가 메일을 받아요.
+그 센터 소속 관리자(`active: true`)가 메일을 받아요.
 
 ### 🔁 중복 이슈 방지
 같은 점검 기록(`source_log_id`)으로 이미 이슈가 만들어져 있으면, 새로 만들지 않고 기존 이슈의 메모만 업데이트해요. 같은 점검 건으로 메모를 두 번 고쳐도 이슈가 중복 생성되지 않아요.
