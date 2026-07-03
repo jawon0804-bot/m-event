@@ -71,6 +71,14 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .hidden-logout-btn:hover span, .hidden-logout-btn:hover i {
   opacity: 1; transition-delay: 0.15s;
 }
+/* 터치 기기(hover 미지원)에서는 일반 버튼으로 노출 — 모바일 로그아웃 불가 문제 해결 */
+@media (hover: none) {
+  .hidden-logout-btn {
+    width: auto; height: 32px; padding: 0 12px !important;
+    background: rgba(255,255,255,.15); color: #fff; border-radius: 6px;
+  }
+  .hidden-logout-btn span, .hidden-logout-btn i { opacity: 1; }
+}
 
 /* ── 메인 탭 (이벤트/엑셀/사진) ── */
 .main-tabs {
@@ -447,7 +455,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   <div class="page active" id="page-event">
     <div class="event-toolbar">
       <div class="sub-tabs">
-        <select id="filter-center-event" class="event-center-select" style="display:none;" onchange="subscribeEvents()"></select>
+        <select id="filter-center-event" class="event-center-select" style="display:none;" onchange="eventPage=1;subscribeEvents()"></select>
         <div class="sub-tab active" data-tab="진행중" onclick="switchEventTab('진행중')">
           진행중 <span class="badge" id="badge-active2">0</span>
         </div>
@@ -455,7 +463,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
       </div>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input type="text" id="search-input" placeholder="설비, 내용, 점검자 검색..." oninput="renderList()">
+        <input type="text" id="search-input" placeholder="설비, 내용, 점검자 검색..." oninput="eventPage=1;renderList()">
       </div>
     </div>
     <div class="event-list" id="event-list">
@@ -473,7 +481,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
       <input type="date" id="filter-start-excel">
       <label>종료일</label>
       <input type="date" id="filter-end-excel">
-      <button class="search-btn" onclick="loadExcel()">🔍 조회</button>
+      <button class="search-btn" onclick="excelPage=1;loadExcel()">🔍 조회</button>
     </div>
     <div class="spinner-wrap" id="spinner-excel">
       <div class="spinner"></div>
@@ -494,7 +502,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
       <input type="date" id="filter-start-photo">
       <label>종료일</label>
       <input type="date" id="filter-end-photo">
-      <button class="search-btn" onclick="loadDashPhotos()">🔍 조회</button>
+      <button class="search-btn" onclick="photoPage=1;loadDashPhotos()">🔍 조회</button>
     </div>
     <div class="spinner-wrap" id="spinner-photo">
       <div class="spinner"></div>
@@ -503,6 +511,8 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     <div id="photo-list">
       <div class="empty-state"><div class="icon">📷</div><p>조회 버튼을 눌러 검색하세요.</p></div>
     </div>
+    <!-- 사진 페이지네이션 (기존에는 모달 내부에 잘못 위치해 있었음) -->
+    <div class="pagination" id="pagination-photo"></div>
   </div>
 
   <!-- ── 보고서 페이지 ── -->
@@ -570,7 +580,6 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     <div class="timeline" id="modal-timeline"></div>
     <div class="modal-action" id="modal-action"></div>
   </div>
-    <div class="pagination" id="pagination-photo"></div>
 </div>
 
 <!-- 사진 원본 뷰어 -->
@@ -612,6 +621,40 @@ let currentPage  = "event";
 let currentEvent = null;
 let unsubscribe  = null;
 
+// ── 페이지네이션 상태 ──
+const PAGE_SIZE = 30;
+let eventPage = 1, excelPage = 1, photoPage = 1;
+
+// ──────────────────────────────────────────────
+// 유틸
+// ──────────────────────────────────────────────
+function fmt(d) {
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function fmtDate(ts) {
+  if (!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+// HTML 이스케이프 — 작은따옴표(')까지 처리 (속성 값 삽입 시 안전)
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+// photo_count가 문자열("3장")이든 숫자(3)든 안전하게 정수로 변환
+function toCount(v) {
+  const n = parseInt(String(v ?? "0").replace(/[^0-9]/g, ""), 10);
+  return Number.isNaN(n) ? 0 : n;
+}
+// 시작일~종료일 90일 초과 여부
+function isOver90Days(start, end) {
+  if (!start || !end) return false;
+  return (new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24) > 90;
+}
+
 // ──────────────────────────────────────────────
 // 로그인
 // ──────────────────────────────────────────────
@@ -632,7 +675,10 @@ async function login() {
     currentUser = matched.data();
     sessionStorage.setItem("m_user", JSON.stringify(currentUser));
     showApp();
-  } catch(e) { errEl.textContent = "로그인 중 오류가 발생했습니다."; }
+  } catch(e) {
+    console.error("로그인 오류:", e); // 원인(권한/네트워크) 구분을 위해 로깅
+    errEl.textContent = "로그인 중 오류가 발생했습니다.";
+  }
 }
 
 function logout() {
@@ -644,8 +690,19 @@ function logout() {
 }
 
 window.onload = () => {
-  const saved = sessionStorage.getItem("m_user");
-  if (saved) { currentUser = JSON.parse(saved); showApp(); }
+  // sessionStorage 손상/필수 필드 누락에 방어 — 실패해도 아래 초기화는 계속 진행
+  try {
+    const saved = JSON.parse(sessionStorage.getItem("m_user") || "null");
+    if (saved && saved.name && saved.center_name) {
+      currentUser = saved;
+      showApp();
+    } else if (saved) {
+      sessionStorage.removeItem("m_user");
+    }
+  } catch(e) {
+    console.warn("세션 복원 실패:", e);
+    sessionStorage.removeItem("m_user");
+  }
   const today    = new Date();
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
   ["excel","photo","report"].forEach(k => {
@@ -665,6 +722,7 @@ async function loadFidLocations(centerOverride) {
     const center = centerOverride || (currentUser.center_name === "Master" ? "" : currentUser.center_name);
     if (!center) return;
     const res = await fetch(`${DASHBOARD_API}/api/fidlocations?center=${encodeURIComponent(center)}`);
+    if (!res.ok) throw new Error(`API 응답 오류: ${res.status}`);
     const data = await res.json();
     if (data.ok) { fidLocations = data.fidLocations || {}; sheetLabels = data.sheetLabels || {}; }
   } catch(e) { console.warn("fidLocations 로드 실패:", e); }
@@ -763,11 +821,16 @@ function subscribeEvents() {
     allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderList();
     updateBadge();
+  }, e => {
+    console.error("이벤트 구독 오류:", e);
+    document.getElementById("event-list").innerHTML =
+      `<div class="empty-state"><div class="icon">⚠️</div><p>이벤트를 불러오는 중 오류가 발생했습니다.</p></div>`;
   });
 }
 
 function switchEventTab(tab) {
   eventTab = tab;
+  eventPage = 1; // 탭 전환 시 페이지 리셋
   document.querySelectorAll(".sub-tab").forEach(el =>
     el.classList.toggle("active", el.dataset.tab === tab));
   renderList();
@@ -791,15 +854,20 @@ function renderList() {
       <div class="icon">${isActive ? "✅" : "📭"}</div>
       <p>${isActive ? "진행 중인 이벤트가 없습니다." : "완료된 이벤트가 없습니다."}</p>
     </div>`;
+    renderPagination("pagination-event", 0, 1, "goEventPage");
     return;
   }
   const total = filtered.length;
+  // 필터/검색 변경으로 총 페이지가 줄었을 때 현재 페이지 범위 보정
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (eventPage > totalPages) eventPage = totalPages;
+
   const paged = filtered.slice((eventPage-1)*PAGE_SIZE, eventPage*PAGE_SIZE);
   el.innerHTML = paged.map(ev => {
     const lastAction = (ev.history||[]).slice(-1)[0];
-    const hasPhoto   = ev.photo_count > 0;
+    const photoCount = toCount(ev.photo_count);
     return `
-    <div class="event-item" onclick="openModal('${ev.id}')">
+    <div class="event-item" data-event-id="${esc(ev.id)}">
       <div class="status-dot ${ev.status}"></div>
       <div class="event-meta">
         <div class="event-center">${esc(ev.center_name||"")}</div>
@@ -808,7 +876,7 @@ function renderList() {
       <div class="event-body">
         <div class="event-memo">${esc(ev.memo||"")}</div>
         ${lastAction && lastAction.type !== "발생" ? `<div class="event-preview">↳ ${esc(lastAction.content||"")}</div>` : ""}
-        ${hasPhoto ? `<div class="has-photo">📷 사진 ${ev.photo_count}장</div>` : ""}
+        ${photoCount > 0 ? `<div class="has-photo">📷 사진 ${photoCount}장</div>` : ""}
       </div>
       <div class="event-right">
         <div class="event-date">${fmtDate(ev.created_at)}</div>
@@ -817,6 +885,10 @@ function renderList() {
       </div>
     </div>`;
   }).join("");
+  // 인라인 onclick 대신 리스너 연결 (문자열 조립을 통한 데이터 주입 차단)
+  el.querySelectorAll(".event-item").forEach(item => {
+    item.addEventListener("click", () => openModal(item.dataset.eventId));
+  });
   renderPagination("pagination-event", total, eventPage, "goEventPage");
 }
 function goEventPage(p) { eventPage = p; renderList(); window.scrollTo(0,0); }
@@ -891,47 +963,60 @@ async function submitAction(type) {
       ...(type==="완료" ? { completed_at: firebase.firestore.FieldValue.serverTimestamp() } : {}),
     });
     closeModal();
-  } catch(e) { alert("처리 중 오류가 발생했습니다."); }
+  } catch(e) {
+    console.error("조치 처리 오류:", e);
+    alert("처리 중 오류가 발생했습니다.");
+  }
 }
 
 async function loadEventPhotos(ev) {
   const grid = document.getElementById("photo-grid");
   const sec  = document.getElementById("photo-section");
 
-  // events에 photos URL이 있으면 바로 사용
+  // 렌더링 + 리스너 연결 공통 함수 (인라인 onclick 제거)
+  const renderThumbs = (cards) => {
+    grid.innerHTML = cards.map((c, idx) => `
+      <div>
+        <img class="photo-thumb" data-idx="${idx}" src="${esc(c.url)}" alt="${esc(c.label||"사진")}"
+             ${c.fileName ? `title="${esc(c.fileName)}"` : ""}>
+        ${c.label ? `<div style="font-size:11px;color:var(--gray4);text-align:center;margin-top:4px">${esc(c.label)}</div>` : ""}
+      </div>`).join("");
+    grid.querySelectorAll(".photo-thumb").forEach(img => {
+      img.addEventListener("click", () => openEventViewer(cards[Number(img.dataset.idx)].url));
+    });
+  };
+
+  // ① events에 photos URL이 있으면 바로 사용
   const photoUrls = (ev.photos || "").split(",").map(s => s.trim()).filter(Boolean);
   if (photoUrls.length > 0) {
     sec.style.display = "block";
-    grid.innerHTML = photoUrls.map(url => `
-      <div>
-        <img class="photo-thumb" src="${url}" alt="사진"
-             onclick="openEventViewer('${url}')">
-      </div>`).join("");
+    renderThumbs(photoUrls.map(url => ({ url })));
     return;
   }
 
-  // photos URL 없으면 파일명 패턴으로 Storage에서 조회
-  const count = parseInt((ev.photo_count||"0").replace(/[^0-9]/g,""));
+  // ② photos URL 없으면 파일명 패턴으로 Storage에서 조회 (병렬 처리)
+  const count = toCount(ev.photo_count);
   if (count === 0) { sec.style.display = "none"; return; }
   sec.style.display = "block";
   grid.innerHTML = `<div class="photo-loading"><div style="width:32px;height:32px;border:3px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;margin-right:8px;vertical-align:middle"></div>사진 불러오는 중...</div>`;
   const dt         = (ev.datetime||"").replace(/[-: ]/g,"").slice(0,12);
   const facilityId = (ev.facility_id||"").replace(/\s/g,"_");
-  const urls = [];
+
+  const tasks = [];
   for (let i = 1; i <= Math.min(count,3); i++) {
     const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;
-    try {
-      const url = await storage.ref(`inspection_photos/${ev.center_name}/${fileName}`).getDownloadURL();
-      urls.push({ url, fileName, facilityId: ev.facility_id });
-    } catch(e) { console.warn("사진 로드 실패:", fileName); }
+    tasks.push(
+      storage.ref(`inspection_photos/${ev.center_name}/${fileName}`).getDownloadURL()
+        .then(url => ({ url, fileName, label: ev.facility_id }))
+    );
   }
+  // allSettled: 일부 파일이 없어도 나머지는 표시 (기존 동작 유지)
+  const results = await Promise.allSettled(tasks);
+  const urls = results.filter(r => r.status === "fulfilled").map(r => r.value);
+  results.filter(r => r.status === "rejected").forEach(r => console.warn("사진 로드 실패:", r.reason?.code || r.reason));
+
   if (urls.length === 0) { grid.innerHTML = `<div class="no-photo">사진을 불러올 수 없습니다.</div>`; return; }
-  grid.innerHTML = urls.map(({ url, fileName, facilityId }) => `
-    <div>
-      <img class="photo-thumb" src="${url}" alt="${esc(facilityId)}"
-           onclick="openEventViewer('${url}')" title="${esc(fileName)}">
-      <div style="font-size:11px;color:var(--gray4);text-align:center;margin-top:4px">${esc(facilityId)}</div>
-    </div>`).join("");
+  renderThumbs(urls);
 }
 
 function openEventViewer(url) {
@@ -958,12 +1043,9 @@ async function loadExcel() {
   const end    = document.getElementById("filter-end-excel").value;
 
   // 90일 초과 체크
-  if (start && end) {
-    const diff = (new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24);
-    if (diff > 90) {
-      alert("조회 기간은 최대 90일까지 가능합니다.");
-      return;
-    }
+  if (isOver90Days(start, end)) {
+    alert("조회 기간은 최대 90일까지 가능합니다.");
+    return;
   }
   const el     = document.getElementById("excel-list");
   const sp     = document.getElementById("spinner-excel");
@@ -975,13 +1057,24 @@ async function loadExcel() {
     if (end)    q = q.where("datetime","<=",end+"\uffff");
     const snap = await q.get();
     sp.classList.remove("show");
-    if (snap.empty) { el.innerHTML = `<div class="empty-state"><div class="icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div><p>해당 기간에 엑셀 파일이 없습니다.</p></div>`; return; }
+    if (snap.empty) {
+      el.innerHTML = `<div class="empty-state"><div class="icon"><i class="fa-solid fa-file-excel" style="color:#217346;font-size:2rem;"></i></div><p>해당 기간에 엑셀 파일이 없습니다.</p></div>`;
+      renderPagination("pagination-excel", 0, 1, "goExcelPage");
+      return;
+    }
+
+    // ── 페이지네이션: 문서(항목) 단위로 슬라이싱한 뒤 월별 그룹핑 ──
+    const docs  = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const total = docs.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (excelPage > totalPages) excelPage = totalPages;
+    const paged = docs.slice((excelPage-1)*PAGE_SIZE, excelPage*PAGE_SIZE);
+
     const groups = {};
-    snap.docs.forEach(d => {
-      const data    = d.data();
-      const dateKey = (data.datetime||"").slice(0,7);
+    paged.forEach(item => {
+      const dateKey = (item.datetime||"").slice(0,7);
       if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push({ id: d.id, ...data });
+      groups[dateKey].push(item);
     });
     let html = "";
     Object.keys(groups).sort().reverse().forEach(month => {
@@ -996,12 +1089,12 @@ async function loadExcel() {
             <div class="excel-meta">날짜: ${esc(item.datetime||"")}</div>
             <div class="excel-center">${esc(item.center_name||"")}</div>
           </div>
-          <a class="dl-btn" href="${esc(item.file_url||"#")}" target="_blank">⬇ 다운로드</a>
+          <a class="dl-btn" href="${esc(item.file_url||"#")}" target="_blank" rel="noopener">⬇ 다운로드</a>
         </div>`;
       });
     });
     el.innerHTML = html;
-    renderPagination("pagination-excel", Object.keys(groups).length, excelPage, "goExcelPage");
+    renderPagination("pagination-excel", total, excelPage, "goExcelPage");
   } catch(e) {
     sp.classList.remove("show");
     console.error(e);
@@ -1024,49 +1117,57 @@ async function loadDashPhotos() {
   const end    = document.getElementById("filter-end-photo").value;
 
   // 90일 초과 체크
-  if (start && end) {
-    const diff = (new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24);
-    if (diff > 90) {
-      alert("조회 기간은 최대 90일까지 가능합니다.");
-      return;
-    }
+  if (isOver90Days(start, end)) {
+    alert("조회 기간은 최대 90일까지 가능합니다.");
+    return;
   }
   const el     = document.getElementById("photo-list");
   const sp     = document.getElementById("spinner-photo");
   el.innerHTML = ""; sp.classList.add("show");
   try {
+    // 날짜 필터를 서버 사이드로 이동 — 전체 로그를 받아오지 않아 읽기 비용/속도 개선
+    // (center + datetime 복합 색인 필요 시 콘솔 에러의 링크로 생성)
     let q = db.collection("inspection_logs").orderBy("datetime","desc");
     if (center) q = q.where("center_name","==",center);
+    if (start)  q = q.where("datetime",">=",start);
+    if (end)    q = q.where("datetime","<=",end+"\uffff");
     const snap = await q.get();
-    const filtered = snap.docs.filter(d => {
-      const data  = d.data();
-      const count = parseInt((data.photo_count||"0").replace(/[^0-9]/g,""));
-      if (count <= 0) return false;
-      const dt = (data.datetime||"").slice(0,10);
-      if (start && dt < start) return false;
-      if (end   && dt > end)   return false;
-      return true;
-    });
+
+    // photo_count 필터만 클라이언트 사이드 유지 (문자열/숫자 혼재 가능성 때문)
+    const filtered = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(item => toCount(item.photo_count) > 0);
+
     sp.classList.remove("show");
-    if (filtered.length === 0) { el.innerHTML = `<div class="empty-state"><div class="icon">📷</div><p>해당 기간에 사진이 없습니다.</p></div>`; return; }
+    if (filtered.length === 0) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">📷</div><p>해당 기간에 사진이 없습니다.</p></div>`;
+      renderPagination("pagination-photo", 0, 1, "goPhotoPage");
+      return;
+    }
+
+    // ── 페이지네이션: 로그 항목 단위로 슬라이싱한 뒤 일자별 그룹핑 ──
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (photoPage > totalPages) photoPage = totalPages;
+    const paged = filtered.slice((photoPage-1)*PAGE_SIZE, photoPage*PAGE_SIZE);
+
     const groups = {};
-    filtered.forEach(d => {
-      const data    = d.data();
-      const dateKey = (data.datetime||"").slice(0,10);
+    paged.forEach(item => {
+      const dateKey = (item.datetime||"").slice(0,10);
       if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push({ id: d.id, ...data });
+      groups[dateKey].push(item);
     });
     let html = "";
     Object.keys(groups).sort().reverse().forEach(date => {
       const items       = groups[date];
-      const totalPhotos = items.reduce((s,i) => s + parseInt((i.photo_count||"0").replace(/[^0-9]/g,"")), 0);
+      const totalPhotos = items.reduce((s,i) => s + toCount(i.photo_count), 0);
       html += `
         <div class="photo-group-header">
-          <span>📅 ${date} (${items.length}건 · 사진 ${totalPhotos}장)</span>
+          <span>📅 ${esc(date)} (${items.length}건 · 사진 ${totalPhotos}장)</span>
           <span style="font-size:12px;color:var(--gray4)">${esc(items[0]?.center_name||"")}</span>
         </div>
         <div class="photo-group-body">
-          <div class="photo-grid-dash" id="pgrid-${date}">
+          <div class="photo-grid-dash" data-date="${esc(date)}">
             <div style="color:var(--gray3);font-size:13px;display:flex;align-items:center;gap:8px">
               <div style="width:32px;height:32px;border:3px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite"></div>로드 중...
             </div>
@@ -1074,6 +1175,7 @@ async function loadDashPhotos() {
         </div>`;
     });
     el.innerHTML = html;
+    renderPagination("pagination-photo", total, photoPage, "goPhotoPage");
     for (const [date, items] of Object.entries(groups)) loadPhotoGroup(date, items);
   } catch(e) {
     sp.classList.remove("show");
@@ -1083,33 +1185,48 @@ async function loadDashPhotos() {
 }
 
 async function loadPhotoGroup(date, items) {
-  const grid = document.getElementById(`pgrid-${date}`);
+  const grid = document.querySelector(`.photo-grid-dash[data-date="${CSS.escape(date)}"]`);
   if (!grid) return;
-  const cards = [];
+
+  // getDownloadURL 순차 await → 병렬(allSettled)로 변경: N장 × RTT → 약 1 RTT
+  const tasks = [];
   for (const item of items) {
-    const count      = parseInt((item.photo_count||"0").replace(/[^0-9]/g,""));
+    const count      = toCount(item.photo_count);
     const facilityId = (item.facility_id||"").replace(/\s/g,"_");
     const dt         = (item.datetime||"").replace(/[-: ]/g,"").slice(0,12);
     for (let i = 1; i <= Math.min(count,3); i++) {
       const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;
-      try {
-        const url = await storage.ref(`inspection_photos/${item.center_name}/${fileName}`).getDownloadURL();
-        cards.push({ url, fileName, facilityId: item.facility_id, fid_name: item.fid_name||item.facility_id, datetime: item.datetime });
-      } catch(e) { if (e.code !== "storage/object-not-found") console.warn(fileName, e.code); }
+      tasks.push(
+        storage.ref(`inspection_photos/${item.center_name}/${fileName}`).getDownloadURL()
+          .then(url => ({ url, fileName, facilityKey: facilityId,
+                          facilityId: item.facility_id,
+                          fid_name: item.fid_name||item.facility_id,
+                          datetime: item.datetime }))
+          .catch(e => {
+            if (e.code !== "storage/object-not-found") console.warn(fileName, e.code);
+            return null;
+          })
+      );
     }
   }
+  const cards = (await Promise.all(tasks)).filter(Boolean);
+
   if (cards.length === 0) { grid.innerHTML = `<div style="color:var(--gray3);font-size:13px">사진을 불러올 수 없습니다.</div>`; return; }
-  grid.innerHTML = cards.map(({ url, fileName, facilityId, fid_name, datetime }) => `
+  grid.innerHTML = cards.map((c, idx) => `
     <div class="photo-card">
-      <img class="photo-thumb-dash" src="${url}" alt="${esc(fid_name||facilityId)}"
-           onclick="openViewer('${url}','${esc(fileName)}','${esc(fid_name||facilityId)}')"
+      <img class="photo-thumb-dash" data-idx="${idx}" src="${esc(c.url)}" alt="${esc(c.fid_name||c.facilityId)}"
            onerror="this.style.display='none'">
       <div style="flex:1;min-width:0;">
-        <div class="photo-facility">${esc(sheetLabels[facilityId]||fidLocations[facilityId]||fid_name||facilityId)}</div>
-        <div class="photo-name">${esc(datetime||"")}</div>
+        <div class="photo-facility">${esc(sheetLabels[c.facilityKey]||fidLocations[c.facilityKey]||c.fid_name||c.facilityId)}</div>
+        <div class="photo-name">${esc(c.datetime||"")}</div>
       </div>
-      <a class="photo-dl" href="${url}" download="${esc(fileName)}" target="_blank">⬇ 다운로드</a>
+      <a class="photo-dl" href="${esc(c.url)}" download="${esc(c.fileName)}" target="_blank" rel="noopener">⬇ 다운로드</a>
     </div>`).join("");
+  // 인라인 onclick 문자열 조립 제거 → 리스너 + 클로저로 데이터 전달 (XSS 원천 차단)
+  grid.querySelectorAll(".photo-thumb-dash").forEach(img => {
+    const c = cards[Number(img.dataset.idx)];
+    img.addEventListener("click", () => openViewer(c.url, c.fileName, c.fid_name || c.facilityId));
+  });
 }
 
 function goPhotoPage(p) { photoPage = p; loadDashPhotos(); window.scrollTo(0,0); }
@@ -1127,10 +1244,7 @@ function closeViewer() {
   document.getElementById("viewer-img").src = "";
 }
 
-// ── 페이지네이션 ──
-const PAGE_SIZE = 30;
-let eventPage = 1, excelPage = 1, photoPage = 1;
-
+// ── 페이지네이션 렌더링 ──
 function renderPagination(containerId, total, current, onPageClick) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -1147,21 +1261,6 @@ function renderPagination(containerId, total, current, onPageClick) {
   }
   if (current < totalPages) html += `<button class="page-btn" onclick="${onPageClick}(${current+1})">›</button>`;
   el.innerHTML = html;
-}
-
-// ── 유틸 ──
-function fmt(d) {
-  const p = n => String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-}
-function fmtDate(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  const p = n => String(n).padStart(2,"0");
-  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-function esc(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 </script>
 </body>
