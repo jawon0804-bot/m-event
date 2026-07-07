@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /inspection_logs/{doc} {
+      allow read, write: if true;
+    }
+
+    match /events/{doc} {
+      allow read, write: if true;
+    }
+
+    match /UserDB/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /center_configs/{doc=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /Maxerve_Excel/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /schedule_logs/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /settings/{doc=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /work_logs/{doc} {
+      allow read, write: if true;
+    }
+    match /work_logs/{doc}/{sub=**} {
+      allow read, write: if true;
+    }
+
+    match /_monitor/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
