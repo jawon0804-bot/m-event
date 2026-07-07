@@ -1443,15 +1443,34 @@ let wlWorkday = null;
 let wlUnsubs = [];
 let wlState = { dayWork: [], dayCheck: [], nightWork: [], nightNote: [], legal: [], material: [] };
 let wlBaseDocRef = null;
+let wlBaseSynced = {};       // 필드별 "마지막으로 Firestore와 동기화 확인된 값" — 변경분만 저장하기 위한 기준
+let wlBaseFieldsBound = false; // 단일필드 blur 자동저장 리스너 중복 바인딩 방지
 
 // 09:00 기준 근무일 계산 (백엔드 workLogDailyExport와 동일 로직 — 09:00 이전이면 전날로 취급)
+// ※ 기존에는 toLocaleString() 문자열을 다시 Date로 파싱했는데, 이 포맷은 브라우저/OS 로캘에 따라
+//   달라질 수 있어 컴퓨터마다 근무일 계산이 어긋날 위험이 있었음(서로 다른 문서를 보게 되는 원인).
+//   Intl.DateTimeFormat.formatToParts로 KST 벽시계 값만 안전하게 추출하도록 수정.
 function wlGetWorkday(d) {
-  const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  if (kst.getHours() < 9) kst.setDate(kst.getDate() - 1);
-  const y = kst.getFullYear();
-  const m = String(kst.getMonth()+1).padStart(2,"0");
-  const day = String(kst.getDate()).padStart(2,"0");
-  return `${y}-${m}-${day}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", hourCycle: "h23",
+  }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+
+  let y   = parseInt(parts.year, 10);
+  let m   = parseInt(parts.month, 10);
+  let day = parseInt(parts.day, 10);
+  const hour = parseInt(parts.hour, 10);
+
+  if (hour < 9) {
+    // 자정~08:59는 전날 근무일로 취급 — UTC 기준 연산으로 월/년 경계 자동 처리
+    const rolled = new Date(Date.UTC(y, m - 1, day - 1));
+    y   = rolled.getUTCFullYear();
+    m   = rolled.getUTCMonth() + 1;
+    day = rolled.getUTCDate();
+  }
+  const p2 = n => String(n).padStart(2, "0");
+  return `${y}-${p2(m)}-${p2(day)}`;
 }
 
 function wlInit() {
@@ -1473,6 +1492,7 @@ function wlInit() {
 function wlSubscribe() {
   wlUnsubs.forEach(u => u());
   wlUnsubs = [];
+  wlBaseSynced = {}; // 센터/근무일 전환 시 이전 문서 기준값 초기화 (다른 문서와 뒤섞이지 않도록)
 
   const docId = `${wlCenter}_${wlWorkday}`;
   wlBaseDocRef = db.collection("work_logs").doc(docId);
@@ -1482,9 +1502,12 @@ function wlSubscribe() {
     const data = snap.exists ? snap.data() : {};
     for (const fid of WL_SINGLE_FIELDS) {
       const inp = document.getElementById(fid);
+      const val = data[fid] !== undefined ? data[fid] : "";
+      wlBaseSynced[fid] = val; // 다른 컴퓨터가 쓴 값을 "동기화된 기준값"으로 항상 갱신
       if (inp && data[fid] !== undefined && document.activeElement !== inp) inp.value = data[fid];
     }
   }, e => console.error("[근무일지] 기본정보 구독 오류:", e)));
+  wlBindBaseFieldAutosave();
 
   // 줄 단위 섹션 6개 구독
   for (const key of Object.keys(WL_SECTIONS)) {
@@ -1645,19 +1668,59 @@ async function wlSaveMultiLine(key, idx, rowFids) {
   }
 }
 
-// 기본정보(인원현황/서명/날씨/유틸리티 지침) 저장 — 문서 자체에 merge 저장
+// 단일필드 blur 자동저장 리스너 바인딩 (최초 1회) — 줄 단위 항목과 동일하게 필드 하나만 저장
+// (기존에는 "저장" 버튼 클릭 시 26개 필드 전체를 현재 화면 값으로 통째로 merge-write 했기 때문에,
+//  다른 컴퓨터가 아직 화면에 못 받은/건드리지 않은 필드까지 빈 값으로 덮어써 데이터가 사라지는
+//  문제가 있었음. 필드별로 "실제 바뀐 값만" 저장하도록 변경.)
+function wlBindBaseFieldAutosave() {
+  if (wlBaseFieldsBound) return;
+  wlBaseFieldsBound = true;
+  WL_SINGLE_FIELDS.forEach(fid => {
+    const inp = document.getElementById(fid);
+    if (!inp) return;
+    inp.addEventListener("blur", () => wlSaveBaseField(fid, inp.value));
+  });
+}
+
+// 단일필드 1개 저장 (값이 실제로 바뀐 경우에만 Firestore에 반영)
+async function wlSaveBaseField(fid, value) {
+  if (!wlBaseDocRef) return;
+  if (wlBaseSynced[fid] === value) return; // 변경 없음 → 불필요한 쓰기 스킵
+  try {
+    await wlBaseDocRef.set({
+      [fid]: value,
+      center_name: wlCenter,
+      workday: wlWorkday,
+      updated_at: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    wlBaseSynced[fid] = value; // 낙관적 갱신 (곧 onSnapshot으로 재확정됨)
+  } catch (e) {
+    console.error(`[근무일지] ${fid} 저장 실패:`, e);
+    alert("저장 중 오류가 발생했습니다.");
+  }
+}
+
+// 기본정보 "저장" 버튼 — blur를 안 거치고 남아있는 변경분(예: Enter로 넘어간 필드)을 한 번에 반영.
+// ※ 반드시 wlBaseSynced와 다른(=실제로 바뀐) 필드만 payload에 담아, 다른 컴퓨터가 쓴 값을
+//   덮어쓰지 않도록 함.
 async function wlSaveBaseInfo() {
   if (!wlBaseDocRef) return;
   const payload = {};
+  let hasChange = false;
   for (const fid of WL_SINGLE_FIELDS) {
     const inp = document.getElementById(fid);
-    if (inp) payload[fid] = inp.value;
+    if (!inp) continue;
+    if (wlBaseSynced[fid] !== inp.value) { payload[fid] = inp.value; hasChange = true; }
   }
+  if (!hasChange) { alert("변경된 내용이 없습니다."); return; }
   payload.center_name = wlCenter;
   payload.workday = wlWorkday;
   payload.updated_at = firebase.firestore.FieldValue.serverTimestamp();
   try {
     await wlBaseDocRef.set(payload, { merge: true });
+    for (const fid of WL_SINGLE_FIELDS) {
+      if (fid in payload) wlBaseSynced[fid] = payload[fid];
+    }
     alert("기본정보가 저장되었습니다.");
   } catch (e) {
     console.error("[근무일지] 기본정보 저장 실패:", e);
