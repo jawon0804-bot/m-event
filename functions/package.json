@@ -1,18 +1,15 @@
 {
-  "name": "m-engine-functions",
-  "description": "M-Engine 이슈 트래커 Firebase Functions",
-  "scripts": {
-    "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions:onInspectionLog,functions:onIssueUpdate,functions:issueReminderScheduler,functions:workLogDailyExport",
-    "logs": "firebase functions:log"
-  },
-  "engines": { "node": "22" },
+  "name": "m-event-functions",
+  "description": "M-Event Cloud Functions (2nd Gen)",
   "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
   "dependencies": {
-    "exceljs": "^4.4.0",
-    "firebase-admin": "^13.0.0",
     "firebase-functions": "^7.2.5",
-    "nodemailer": "^6.9.13"
+    "firebase-admin": "^13.0.0",
+    "nodemailer": "^6.9.0",
+    "exceljs": "^4.4.0"
   },
   "private": true
 }
