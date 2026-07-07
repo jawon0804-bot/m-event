@@ -3,7 +3,7 @@
   "description": "M-Event Cloud Functions (2nd Gen)",
   "main": "index.js",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "dependencies": {
     "firebase-functions": "^7.2.5",
