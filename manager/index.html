@@ -559,7 +559,7 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 <col style="width:85px"><col style="width:85px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:105px"><col style="width:105px"><col style="width:105px">
         </colgroup>
 <tr><td colspan="13" class="cell-spacer"></td></tr>
-<tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span>쿠팡 울산sub-hub 물류센터 시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead"><span>담  당</span></td><td class="cell-lbl cell-sighead"><span>과  장</span></td><td class="cell-lbl cell-sighead"><span>팀  장</span></td></tr>
+<tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span id="wl-title-text">시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead"><span>담  당</span></td><td class="cell-lbl cell-sighead"><span>과  장</span></td><td class="cell-lbl cell-sighead"><span>팀  장</span></td></tr>
 <tr><td class="cell-blank"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_staff"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_manager"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_teamlead"></td></tr>
 <tr><td colspan="9" class="cell-spacer"></td><td class="cell-blank"></td></tr>
 <tr><td colspan="2" class="cell-input "><input type="date" id="date_input"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input "><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
@@ -1434,6 +1434,8 @@ const WL_SINGLE_FIELDS = [
   "util_kw_usage","util_kw_cum","util_kw_month",
 ];
 
+const WL_TITLE_SUFFIX = "시설 업무일지"; // 필요 시 센터별로 다르게 하려면 여기를 조회 로직으로 교체
+
 let wlCenter = null;
 let wlWorkday = null;
 let wlUnsubs = [];
@@ -1458,6 +1460,8 @@ function wlInit() {
   wlWorkday = wlGetWorkday(new Date());
   const el = document.getElementById("wl-today-str");
   if (el) el.textContent = `(${wlWorkday} 근무일)`;
+  const titleEl = document.getElementById("wl-title-text");
+  if (titleEl) titleEl.textContent = `${wlCenter} ${WL_TITLE_SUFFIX}`;
   wlSubscribe();
 }
 
