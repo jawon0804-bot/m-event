@@ -416,7 +416,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 ══════════════════════════════════ */
 table.wl-sheet { border-collapse: collapse; margin: 0 auto; background: #fff; font-size: 12px; table-layout: fixed; }
 table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center; vertical-align: middle; overflow: hidden; height: 26px; }
-.wl-sheet .cell-blank { background: #fff; }
+.wl-sheet .cell-blank { background: #fff; border: none; }
 .wl-sheet .cell-spacer { border: none; background: #fff; height: 8px !important; }
 .wl-sheet .cell-lbl { background: #fff; font-weight: 600; white-space: pre-line; word-break: keep-all; }
 .wl-sheet .cell-lbl span { display: inline-block; }
@@ -433,7 +433,7 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-sheet .cell-calc input { color: var(--blue); font-weight: 700; }
 .wl-sheet .cell-input input { width: 100%; height: 100%; border: none; outline: none; text-align: center; font-size: 12px; font-family: inherit; background: transparent; }
 .wl-sheet .cell-input input:focus { background: #eef4ff; }
-.wl-sheet .cell-input input[type="text"] { text-align: left; padding-left: 4px; }
+.wl-sheet .cell-input input[type="text"] { text-align: center; }
 .wl-locked input { background: #f3f4f6 !important; color: var(--gray5); cursor: default; }
 .wl-locked-admin input { background: #fff7ed !important; cursor: pointer; }
 .wl-active input { background: #eff6ff !important; }
@@ -559,11 +559,11 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 <col style="width:85px"><col style="width:85px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:105px"><col style="width:105px"><col style="width:105px">
         </colgroup>
 <tr><td colspan="13" class="cell-spacer"></td></tr>
-<tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span id="wl-title-text">시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead"><span>담  당</span></td><td class="cell-lbl cell-sighead"><span>과  장</span></td><td class="cell-lbl cell-sighead"><span>팀  장</span></td></tr>
+<tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span id="wl-title-text">시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead cell-yellow"><span>담  당</span></td><td class="cell-lbl cell-sighead cell-yellow"><span>과  장</span></td><td class="cell-lbl cell-sighead cell-yellow"><span>팀  장</span></td></tr>
 <tr><td class="cell-blank"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_staff"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_manager"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_teamlead"></td></tr>
 <tr><td colspan="9" class="cell-spacer"></td><td class="cell-blank"></td></tr>
 <tr><td colspan="2" class="cell-input "><input type="date" id="date_input"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input "><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
-<tr><td rowspan="4" class="cell-lbl cell-section-v vertical"><span>인 력 현 황</span></td><td colspan="2" class="cell-lbl "><span>총 원</span></td><td colspan="2" class="cell-lbl "><span>출 근 자</span></td><td class="cell-lbl "><span>주 간</span></td><td class="cell-lbl "><span>야 간</span></td><td class="cell-lbl "><span>비 번</span></td><td class="cell-lbl "><span>휴 무</span></td><td class="cell-lbl "><span>연 차</span></td><td class="cell-lbl "><span>대휴</span></td><td class="cell-lbl "><span>교육</span></td><td class="cell-lbl "><span>병가</span></td></tr>
+<tr><td rowspan="4" class="cell-lbl cell-section-v vertical"><span>인 력 현 황</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>총 원</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>출 근 자</span></td><td class="cell-lbl cell-yellow"><span>주 간</span></td><td class="cell-lbl cell-yellow"><span>야 간</span></td><td class="cell-lbl cell-yellow"><span>비 번</span></td><td class="cell-lbl cell-yellow"><span>휴 무</span></td><td class="cell-lbl cell-yellow"><span>연 차</span></td><td class="cell-lbl cell-yellow"><span>대휴</span></td><td class="cell-lbl cell-yellow"><span>교육</span></td><td class="cell-lbl cell-yellow"><span>병가</span></td></tr>
 <tr><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_total" value="5"></td><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_attend"></td><td class="cell-input "><input type="number" step="1" id="cnt_day"></td><td class="cell-input "><input type="number" step="1" id="cnt_night"></td><td class="cell-input "><input type="number" step="1" id="cnt_off"></td><td class="cell-input "><input type="number" step="1" id="cnt_rest"></td><td class="cell-input "><input type="number" step="1" id="cnt_annual"></td><td class="cell-input "><input type="number" step="1" id="cnt_compoff"></td><td class="cell-input "><input type="number" step="1" id="cnt_edu"></td><td class="cell-input "><input type="number" step="1" id="cnt_sick"></td></tr>
 <tr><td colspan="4" class="cell-lbl "><span>주간 근무자</span></td><td colspan="4" class="cell-lbl "><span>야간 근무자</span></td><td colspan="4" class="cell-lbl "><span>비번/휴무/교육</span></td></tr>
 <tr><td colspan="4" class="cell-input "><input type="text" id="names_day"></td><td colspan="4" class="cell-input "><input type="text" id="names_night"></td><td colspan="4" class="cell-input "><input type="text" id="names_off"></td></tr>
