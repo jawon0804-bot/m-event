@@ -3,14 +3,15 @@
   "description": "M-Engine 이슈 트래커 Firebase Functions",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions",
+    "deploy": "firebase deploy --only functions:onInspectionLog,functions:onIssueUpdate,functions:issueReminderScheduler,functions:workLogDailyExport",
     "logs": "firebase functions:log"
   },
   "engines": { "node": "22" },
   "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^4.9.0",
+    "exceljs": "^4.4.0",
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^7.2.5",
     "nodemailer": "^6.9.13"
   },
   "private": true
