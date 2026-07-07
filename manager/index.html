@@ -421,6 +421,7 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-sheet .cell-lbl { background: #fff; font-weight: 600; white-space: pre-line; word-break: keep-all; }
 .wl-sheet .cell-lbl span { display: inline-block; }
 .wl-sheet .cell-lbl.vertical span { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 2px; }
+.wl-sheet tr.row-noborder td { border: none; }
 .wl-sheet .cell-title { font-size: 19px; font-weight: 800; color: var(--navy); }
 .wl-sheet .cell-sighead { font-size: 13px; font-weight: 700; }
 .wl-sheet .cell-sigbox { height: 80px !important; }
@@ -434,6 +435,7 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-sheet .cell-input input { width: 100%; height: 100%; border: none; outline: none; text-align: center; font-size: 12px; font-family: inherit; background: transparent; }
 .wl-sheet .cell-input input:focus { background: #eef4ff; }
 .wl-sheet .cell-input input[type="text"] { text-align: center; }
+.wl-sheet .cell-input.wl-left input[type="text"] { text-align: left; padding-left: 6px; }
 .wl-locked input { background: #f3f4f6 !important; color: var(--gray5); cursor: default; }
 .wl-locked-admin input { background: #fff7ed !important; cursor: pointer; }
 .wl-active input { background: #eff6ff !important; }
@@ -562,7 +564,7 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 <tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span id="wl-title-text">시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead cell-yellow"><span>담  당</span></td><td class="cell-lbl cell-sighead cell-yellow"><span>과  장</span></td><td class="cell-lbl cell-sighead cell-yellow"><span>팀  장</span></td></tr>
 <tr><td class="cell-blank"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_staff"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_manager"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_teamlead"></td></tr>
 <tr><td colspan="9" class="cell-spacer"></td><td class="cell-blank"></td></tr>
-<tr><td colspan="2" class="cell-input "><input type="date" id="date_input"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input "><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
+<tr class="row-noborder"><td colspan="2" class="cell-input"><input type="date" id="date_input"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input wl-left"><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
 <tr><td rowspan="4" class="cell-lbl cell-section-v vertical"><span>인 력 현 황</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>총 원</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>출 근 자</span></td><td class="cell-lbl cell-yellow"><span>주 간</span></td><td class="cell-lbl cell-yellow"><span>야 간</span></td><td class="cell-lbl cell-yellow"><span>비 번</span></td><td class="cell-lbl cell-yellow"><span>휴 무</span></td><td class="cell-lbl cell-yellow"><span>연 차</span></td><td class="cell-lbl cell-yellow"><span>대휴</span></td><td class="cell-lbl cell-yellow"><span>교육</span></td><td class="cell-lbl cell-yellow"><span>병가</span></td></tr>
 <tr><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_total" value="5"></td><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_attend"></td><td class="cell-input "><input type="number" step="1" id="cnt_day"></td><td class="cell-input "><input type="number" step="1" id="cnt_night"></td><td class="cell-input "><input type="number" step="1" id="cnt_off"></td><td class="cell-input "><input type="number" step="1" id="cnt_rest"></td><td class="cell-input "><input type="number" step="1" id="cnt_annual"></td><td class="cell-input "><input type="number" step="1" id="cnt_compoff"></td><td class="cell-input "><input type="number" step="1" id="cnt_edu"></td><td class="cell-input "><input type="number" step="1" id="cnt_sick"></td></tr>
 <tr><td colspan="4" class="cell-lbl "><span>주간 근무자</span></td><td colspan="4" class="cell-lbl "><span>야간 근무자</span></td><td colspan="4" class="cell-lbl "><span>비번/휴무/교육</span></td></tr>
@@ -576,35 +578,35 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 <tr><td colspan="13" class="cell-spacer"></td></tr>
 <tr><td colspan="13" class="cell-lbl cell-section"><span>법정점검 및 대관업무, 공사관련</span></td></tr>
 <tr><td class="cell-lbl cell-yellow"><span>구분</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>일정</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>업체명</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>담당자(연락처)</span></td><td colspan="6" class="cell-lbl cell-yellow"><span>업무(공사)내용</span></td></tr>
-<tr><td class="cell-lbl cell-num"><span>1</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_1"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_1"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_1"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_1"></td></tr>
-<tr><td class="cell-lbl cell-num"><span>2</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_2"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_2"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_2"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_2"></td></tr>
-<tr><td class="cell-lbl cell-num"><span>3</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_3"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_3"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_3"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_3"></td></tr>
-<tr><td class="cell-lbl cell-num"><span>4</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_4"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_4"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_4"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_4"></td></tr>
-<tr><td class="cell-lbl cell-num"><span>5</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_5"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_5"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_5"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_5"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>1</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_1"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_1"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_1"></td><td colspan="6" class="cell-input wl-left"><input type="text" id="legal_content_1"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>2</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_2"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_2"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_2"></td><td colspan="6" class="cell-input wl-left"><input type="text" id="legal_content_2"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>3</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_3"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_3"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_3"></td><td colspan="6" class="cell-input wl-left"><input type="text" id="legal_content_3"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>4</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_4"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_4"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_4"></td><td colspan="6" class="cell-input wl-left"><input type="text" id="legal_content_4"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>5</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_5"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_5"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_5"></td><td colspan="6" class="cell-input wl-left"><input type="text" id="legal_content_5"></td></tr>
 <tr><td rowspan="2" class="cell-lbl cell-yellow"><span>구분</span></td><td rowspan="2" colspan="10" class="cell-lbl cell-yellow"><span>주 간 업 무</span></td><td rowspan="2" colspan="2" class="cell-lbl cell-yellow"><span>일 상 점 검</span></td></tr>
 <tr></tr>
-<tr><td rowspan="29" class="cell-lbl cell-section-v vertical"><span>업 무 내 용</span></td><td rowspan="10" class="cell-lbl cell-subv vertical"><span>작업내용</span></td><td colspan="9" class="cell-input "><input type="text" id="day_work_1"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_1"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_2"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_2"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_3"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_3"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_4"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_4"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_5"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_5"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_6"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_6"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_7"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_7"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_8"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_8"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_9"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_9"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_10"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_10"></td></tr>
+<tr><td rowspan="29" class="cell-lbl cell-section-v vertical"><span>업 무 내 용</span></td><td rowspan="10" class="cell-lbl cell-subv vertical"><span>작업내용</span></td><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_1"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_1"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_2"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_2"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_3"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_3"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_4"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_4"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_5"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_5"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_6"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_6"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_7"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_7"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_8"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_8"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_9"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_9"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="day_work_10"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_10"></td></tr>
 <tr><td rowspan="2" colspan="10" class="cell-lbl cell-yellow"><span>야 간 업 무</span></td><td rowspan="2" colspan="2" class="cell-lbl cell-yellow"><span>특 이 사 항</span></td></tr>
 <tr></tr>
-<tr><td rowspan="10" class="cell-lbl cell-subv vertical"><span>작업내용</span></td><td colspan="9" class="cell-input "><input type="text" id="night_work_1"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_1"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_2"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_2"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_3"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_3"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_4"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_4"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_5"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_5"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_6"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_6"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_7"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_7"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_8"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_8"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_9"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_9"></td></tr>
-<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_10"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_10"></td></tr>
+<tr><td rowspan="10" class="cell-lbl cell-subv vertical"><span>작업내용</span></td><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_1"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_1"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_2"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_2"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_3"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_3"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_4"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_4"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_5"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_5"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_6"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_6"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_7"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_7"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_8"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_8"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_9"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_9"></td></tr>
+<tr><td colspan="9" class="cell-input wl-left"><input type="text" id="night_work_10"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_10"></td></tr>
 <tr><td colspan="12" class="cell-lbl cell-section"><span>자재 입출고 내역</span></td></tr>
 <tr><td class="cell-lbl cell-yellow"><span>작업번호</span></td><td colspan="4" class="cell-lbl cell-yellow"><span>PART NO.</span></td><td class="cell-lbl cell-yellow"><span>수량</span></td><td class="cell-lbl cell-yellow"><span>단위</span></td><td colspan="3" class="cell-lbl cell-yellow"><span>사용 내용</span></td><td class="cell-lbl cell-yellow"><span>사용날짜</span></td><td class="cell-lbl cell-yellow"><span>재고</span></td></tr>
 <tr><td class="cell-input "><input type="text" id="mat_workno_1"></td><td colspan="4" class="cell-input "><input type="text" id="mat_partno_1"></td><td class="cell-input "><input type="number" step="1" id="mat_qty_1"></td><td class="cell-input "><input type="text" id="mat_unit_1"></td><td colspan="3" class="cell-input "><input type="text" id="mat_usage_1"></td><td class="cell-input "><input type="date" id="mat_date_1"></td><td class="cell-input "><input type="text" id="mat_stock_1"></td></tr>
@@ -1462,6 +1464,9 @@ function wlInit() {
   if (el) el.textContent = `(${wlWorkday} 근무일)`;
   const titleEl = document.getElementById("wl-title-text");
   if (titleEl) titleEl.textContent = `${wlCenter} ${WL_TITLE_SUFFIX}`;
+  // 날짜 입력칸 기본값 = 오늘 근무일 (Firestore에 저장된 값이 있으면 onSnapshot이 곧 덮어씀)
+  const dateEl = document.getElementById("date_input");
+  if (dateEl && !dateEl.value) dateEl.value = wlWorkday;
   wlSubscribe();
 }
 
