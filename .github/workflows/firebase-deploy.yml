@@ -17,10 +17,6 @@ jobs:
       - name: Functions 의존성 설치
         run: npm install
         working-directory: functions
-      - name: .env 파일 생성
-        run: |
-          echo "GMAIL_USER=${{ secrets.GMAIL_USER }}" > functions/.env
-          echo "GMAIL_PASS=${{ secrets.GMAIL_PASS }}" >> functions/.env
       - name: Firebase 배포
         run: firebase deploy --only hosting,functions --token "${{ secrets.FIREBASE_TOKEN }}"
         env:
