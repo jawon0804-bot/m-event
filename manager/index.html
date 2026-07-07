@@ -410,6 +410,33 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   .modal-overlay { padding: 60px 0 0; align-items: flex-end; }
   .photo-grid-dash { flex-direction: column; }
 }
+
+/* ══════════════════════════════════
+   근무일지 페이지 (원본 양식 재현)
+══════════════════════════════════ */
+table.wl-sheet { border-collapse: collapse; margin: 0 auto; background: #fff; font-size: 12px; table-layout: fixed; }
+table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center; vertical-align: middle; overflow: hidden; height: 26px; }
+.wl-sheet .cell-blank { background: #fff; }
+.wl-sheet .cell-spacer { border: none; background: #fff; height: 8px !important; }
+.wl-sheet .cell-lbl { background: #fff; font-weight: 600; white-space: pre-line; word-break: keep-all; }
+.wl-sheet .cell-lbl span { display: inline-block; }
+.wl-sheet .cell-lbl.vertical span { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 2px; }
+.wl-sheet .cell-title { font-size: 19px; font-weight: 800; color: var(--navy); }
+.wl-sheet .cell-sighead { font-size: 13px; font-weight: 700; }
+.wl-sheet .cell-sigbox { height: 80px !important; }
+.wl-sheet .cell-section { font-size: 14px; font-weight: 800; color: var(--navy); text-align: left; padding-left: 8px; background: var(--gray1); }
+.wl-sheet .cell-section-v { font-size: 13px; font-weight: 800; color: var(--navy); background: var(--gray1); }
+.wl-sheet .cell-subv { font-size: 11px; color: var(--gray5); background: var(--gray0); }
+.wl-sheet .cell-label-right { text-align: right; padding-right: 8px; font-weight: 700; }
+.wl-sheet .cell-yellow { background: #fff9db; font-weight: 700; font-size: 11px; }
+.wl-sheet .cell-num { color: var(--gray4); font-size: 11px; }
+.wl-sheet .cell-calc input { color: var(--blue); font-weight: 700; }
+.wl-sheet .cell-input input { width: 100%; height: 100%; border: none; outline: none; text-align: center; font-size: 12px; font-family: inherit; background: transparent; }
+.wl-sheet .cell-input input:focus { background: #eef4ff; }
+.wl-sheet .cell-input input[type="text"] { text-align: left; padding-left: 4px; }
+.wl-locked input { background: #f3f4f6 !important; color: var(--gray5); cursor: default; }
+.wl-locked-admin input { background: #fff7ed !important; cursor: pointer; }
+.wl-active input { background: #eff6ff !important; }
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -448,6 +475,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     </div>
     <div class="main-tab" data-page="excel" onclick="switchPage('excel')"><i class="fa-solid fa-file-excel"></i> 엑 셀</div>
     <div class="main-tab" data-page="photo" onclick="switchPage('photo')"><i class="fa-solid fa-camera"></i> 사 진</div>
+    <div class="main-tab" data-page="worklog" onclick="switchPage('worklog')"><i class="fa-solid fa-book"></i> 근무일지</div>
     <div class="main-tab" data-page="report" onclick="switchPage('report')" id="tab-report" style="display:none"><i class="fa-solid fa-file-lines"></i> 보고서</div>
   </div>
 
@@ -455,7 +483,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   <div class="page active" id="page-event">
     <div class="event-toolbar">
       <div class="sub-tabs">
-        <select id="filter-center-event" class="event-center-select" style="display:none;" onchange="eventPage=1;subscribeEvents()"></select>
+        <select id="filter-center-event" class="event-center-select" style="display:none;" onchange="eventPage=1;subscribeEvents();wlCenter=null;if(currentPage==='worklog')wlInit();"></select>
         <div class="sub-tab active" data-tab="진행중" onclick="switchEventTab('진행중')">
           진행중 <span class="badge" id="badge-active2">0</span>
         </div>
@@ -513,6 +541,79 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
     </div>
     <!-- 사진 페이지네이션 (기존에는 모달 내부에 잘못 위치해 있었음) -->
     <div class="pagination" id="pagination-photo"></div>
+  </div>
+
+  <!-- ── 근무일지 페이지 ── -->
+  <div class="page" id="page-worklog">
+    <div class="event-toolbar" style="justify-content:space-between">
+      <div style="font-weight:700;color:var(--navy)">
+        📓 근무일지 <span id="wl-today-str" style="font-weight:400;font-size:13px;color:var(--gray4)"></span>
+      </div>
+      <button class="search-btn" onclick="wlSaveBaseInfo()">
+        <i class="fa-solid fa-floppy-disk"></i> 기본정보 저장(인원현황/서명/날씨)
+      </button>
+    </div>
+    <div style="overflow-x:auto;padding:16px 24px">
+      <table class="wl-sheet">
+        <colgroup>
+<col style="width:85px"><col style="width:85px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:93px"><col style="width:105px"><col style="width:105px"><col style="width:105px">
+        </colgroup>
+<tr><td colspan="13" class="cell-spacer"></td></tr>
+<tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span>쿠팡 울산sub-hub 물류센터 시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead"><span>담  당</span></td><td class="cell-lbl cell-sighead"><span>과  장</span></td><td class="cell-lbl cell-sighead"><span>팀  장</span></td></tr>
+<tr><td class="cell-blank"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_staff"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_manager"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_teamlead"></td></tr>
+<tr><td colspan="9" class="cell-spacer"></td><td class="cell-blank"></td></tr>
+<tr><td colspan="2" class="cell-input "><input type="date" id="date_input"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input "><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
+<tr><td rowspan="4" class="cell-lbl cell-section-v vertical"><span>인 력 현 황</span></td><td colspan="2" class="cell-lbl "><span>총 원</span></td><td colspan="2" class="cell-lbl "><span>출 근 자</span></td><td class="cell-lbl "><span>주 간</span></td><td class="cell-lbl "><span>야 간</span></td><td class="cell-lbl "><span>비 번</span></td><td class="cell-lbl "><span>휴 무</span></td><td class="cell-lbl "><span>연 차</span></td><td class="cell-lbl "><span>대휴</span></td><td class="cell-lbl "><span>교육</span></td><td class="cell-lbl "><span>병가</span></td></tr>
+<tr><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_total" value="5"></td><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_attend"></td><td class="cell-input "><input type="number" step="1" id="cnt_day"></td><td class="cell-input "><input type="number" step="1" id="cnt_night"></td><td class="cell-input "><input type="number" step="1" id="cnt_off"></td><td class="cell-input "><input type="number" step="1" id="cnt_rest"></td><td class="cell-input "><input type="number" step="1" id="cnt_annual"></td><td class="cell-input "><input type="number" step="1" id="cnt_compoff"></td><td class="cell-input "><input type="number" step="1" id="cnt_edu"></td><td class="cell-input "><input type="number" step="1" id="cnt_sick"></td></tr>
+<tr><td colspan="4" class="cell-lbl "><span>주간 근무자</span></td><td colspan="4" class="cell-lbl "><span>야간 근무자</span></td><td colspan="4" class="cell-lbl "><span>비번/휴무/교육</span></td></tr>
+<tr><td colspan="4" class="cell-input "><input type="text" id="names_day"></td><td colspan="4" class="cell-input "><input type="text" id="names_night"></td><td colspan="4" class="cell-input "><input type="text" id="names_off"></td></tr>
+<tr><td colspan="13" class="cell-spacer"></td></tr>
+<tr><td colspan="13" class="cell-lbl cell-section"><span>유틸리티 지침 현황</span></td></tr>
+<tr><td colspan="13" class="cell-spacer"></td></tr>
+<tr><td colspan="4" class="cell-lbl cell-yellow"><span>구  분</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>단 위</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>전일 지침</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>금일 지침</span></td><td class="cell-lbl cell-yellow"><span>금일사용량</span></td><td class="cell-lbl cell-yellow"><span>일간누적량</span></td><td class="cell-lbl cell-yellow"><span>월간사용량</span></td></tr>
+<tr><td class="cell-lbl "><span>상수도</span></td><td colspan="3" class="cell-input "><input type="text" id="util_water_name" value="상수도 급수1차 메인"></td><td colspan="2" class="cell-lbl "><span>㎥</span></td><td colspan="2" class="cell-input "><input type="number" step="0.1" id="util_water_prev"></td><td colspan="2" class="cell-input "><input type="number" step="0.1" id="util_water_today" value="41.7"></td><td class="cell-input cell-calc"><input type="number" step="0.1" id="util_water_usage"></td><td class="cell-input "><input type="number" step="0.1" id="util_water_cum"></td><td class="cell-input "><input type="number" step="0.1" id="util_water_month"></td></tr>
+<tr><td colspan="10" class="cell-lbl "><span>합    계  ( kW )</span></td><td class="cell-input cell-calc"><input type="number" step="0.1" id="util_kw_usage"></td><td class="cell-input "><input type="number" step="0.1" id="util_kw_cum"></td><td class="cell-input "><input type="number" step="0.1" id="util_kw_month"></td></tr>
+<tr><td colspan="13" class="cell-spacer"></td></tr>
+<tr><td colspan="13" class="cell-lbl cell-section"><span>법정점검 및 대관업무, 공사관련</span></td></tr>
+<tr><td class="cell-lbl cell-yellow"><span>구분</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>일정</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>업체명</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>담당자(연락처)</span></td><td colspan="6" class="cell-lbl cell-yellow"><span>업무(공사)내용</span></td></tr>
+<tr><td class="cell-lbl cell-num"><span>1</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_1"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_1"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_1"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_1"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>2</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_2"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_2"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_2"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_2"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>3</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_3"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_3"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_3"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_3"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>4</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_4"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_4"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_4"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_4"></td></tr>
+<tr><td class="cell-lbl cell-num"><span>5</span></td><td colspan="2" class="cell-input "><input type="text" id="legal_sched_5"></td><td colspan="2" class="cell-input "><input type="text" id="legal_company_5"></td><td colspan="2" class="cell-input "><input type="text" id="legal_contact_5"></td><td colspan="6" class="cell-input "><input type="text" id="legal_content_5"></td></tr>
+<tr><td rowspan="2" class="cell-lbl cell-yellow"><span>구분</span></td><td rowspan="2" colspan="10" class="cell-lbl cell-yellow"><span>주 간 업 무</span></td><td rowspan="2" colspan="2" class="cell-lbl cell-yellow"><span>일 상 점 검</span></td></tr>
+<tr></tr>
+<tr><td rowspan="29" class="cell-lbl cell-section-v vertical"><span>업 무 내 용</span></td><td rowspan="10" class="cell-lbl cell-subv vertical"><span>작업내용</span></td><td colspan="9" class="cell-input "><input type="text" id="day_work_1"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_1"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_2"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_2"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_3"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_3"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_4"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_4"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_5"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_5"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_6"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_6"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_7"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_7"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_8"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_8"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_9"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_9"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="day_work_10"></td><td colspan="2" class="cell-input "><input type="text" id="day_check_10"></td></tr>
+<tr><td rowspan="2" colspan="10" class="cell-lbl cell-yellow"><span>야 간 업 무</span></td><td rowspan="2" colspan="2" class="cell-lbl cell-yellow"><span>특 이 사 항</span></td></tr>
+<tr></tr>
+<tr><td rowspan="10" class="cell-lbl cell-subv vertical"><span>작업내용</span></td><td colspan="9" class="cell-input "><input type="text" id="night_work_1"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_1"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_2"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_2"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_3"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_3"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_4"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_4"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_5"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_5"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_6"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_6"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_7"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_7"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_8"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_8"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_9"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_9"></td></tr>
+<tr><td colspan="9" class="cell-input "><input type="text" id="night_work_10"></td><td colspan="2" class="cell-input "><input type="text" id="night_note_10"></td></tr>
+<tr><td colspan="12" class="cell-lbl cell-section"><span>자재 입출고 내역</span></td></tr>
+<tr><td class="cell-lbl cell-yellow"><span>작업번호</span></td><td colspan="4" class="cell-lbl cell-yellow"><span>PART NO.</span></td><td class="cell-lbl cell-yellow"><span>수량</span></td><td class="cell-lbl cell-yellow"><span>단위</span></td><td colspan="3" class="cell-lbl cell-yellow"><span>사용 내용</span></td><td class="cell-lbl cell-yellow"><span>사용날짜</span></td><td class="cell-lbl cell-yellow"><span>재고</span></td></tr>
+<tr><td class="cell-input "><input type="text" id="mat_workno_1"></td><td colspan="4" class="cell-input "><input type="text" id="mat_partno_1"></td><td class="cell-input "><input type="number" step="1" id="mat_qty_1"></td><td class="cell-input "><input type="text" id="mat_unit_1"></td><td colspan="3" class="cell-input "><input type="text" id="mat_usage_1"></td><td class="cell-input "><input type="date" id="mat_date_1"></td><td class="cell-input "><input type="text" id="mat_stock_1"></td></tr>
+<tr><td class="cell-input "><input type="text" id="mat_workno_2"></td><td colspan="4" class="cell-input "><input type="text" id="mat_partno_2"></td><td class="cell-input "><input type="number" step="1" id="mat_qty_2"></td><td class="cell-input "><input type="text" id="mat_unit_2"></td><td colspan="3" class="cell-input "><input type="text" id="mat_usage_2"></td><td class="cell-input "><input type="date" id="mat_date_2"></td><td class="cell-input "><input type="text" id="mat_stock_2"></td></tr>
+<tr><td class="cell-input "><input type="text" id="mat_workno_3"></td><td colspan="4" class="cell-input "><input type="text" id="mat_partno_3"></td><td class="cell-input "><input type="number" step="1" id="mat_qty_3"></td><td class="cell-input "><input type="text" id="mat_unit_3"></td><td colspan="3" class="cell-input "><input type="text" id="mat_usage_3"></td><td class="cell-input "><input type="date" id="mat_date_3"></td><td class="cell-input "><input type="text" id="mat_stock_3"></td></tr>
+<tr><td class="cell-input "><input type="text" id="mat_workno_4"></td><td colspan="4" class="cell-input "><input type="text" id="mat_partno_4"></td><td class="cell-input "><input type="number" step="1" id="mat_qty_4"></td><td class="cell-input "><input type="text" id="mat_unit_4"></td><td colspan="3" class="cell-input "><input type="text" id="mat_usage_4"></td><td class="cell-input "><input type="date" id="mat_date_4"></td><td class="cell-input "><input type="text" id="mat_stock_4"></td></tr>
+<tr><td class="cell-input "><input type="text" id="mat_workno_5"></td><td colspan="4" class="cell-input "><input type="text" id="mat_partno_5"></td><td class="cell-input "><input type="number" step="1" id="mat_qty_5"></td><td class="cell-input "><input type="text" id="mat_unit_5"></td><td colspan="3" class="cell-input "><input type="text" id="mat_usage_5"></td><td class="cell-input "><input type="date" id="mat_date_5"></td><td class="cell-input "><input type="text" id="mat_stock_5"></td></tr>
+      </table>
+    </div>
   </div>
 
   <!-- ── 보고서 페이지 ── -->
@@ -787,6 +888,7 @@ function switchPage(page) {
     el.classList.toggle("active", el.dataset.page === page));
   document.querySelectorAll(".page").forEach(el =>
     el.classList.toggle("active", el.id === `page-${page}`));
+  if (page === "worklog" && !wlCenter) wlInit();
 }
 
 // ──────────────────────────────────────────────
@@ -1299,6 +1401,261 @@ function renderPagination(containerId, total, current, onPageClick) {
   if (current < totalPages) html += `<button class="page-btn" onclick="${onPageClick}(${current+1})">›</button>`;
   el.innerHTML = html;
 }
+
+// ──────────────────────────────────────────────
+// 근무일지 (Firestore work_logs 실시간 연동)
+// ──────────────────────────────────────────────
+const WL_SECTIONS = {
+  dayWork:   { sub: "dayWork",   fids: Array.from({length:10}, (_,i)=>`day_work_${i+1}`),   kind: "simple" },
+  dayCheck:  { sub: "dayCheck",  fids: Array.from({length:10}, (_,i)=>`day_check_${i+1}`),  kind: "simple" },
+  nightWork: { sub: "nightWork", fids: Array.from({length:10}, (_,i)=>`night_work_${i+1}`), kind: "simple" },
+  nightNote: { sub: "nightNote", fids: Array.from({length:10}, (_,i)=>`night_note_${i+1}`), kind: "simple" },
+  legal: {
+    sub: "legal", kind: "multi",
+    rows: Array.from({length:5}, (_,i) => ({
+      sched: `legal_sched_${i+1}`, company: `legal_company_${i+1}`,
+      contact: `legal_contact_${i+1}`, content: `legal_content_${i+1}`,
+    })),
+  },
+  material: {
+    sub: "material", kind: "multi",
+    rows: Array.from({length:5}, (_,i) => ({
+      workno: `mat_workno_${i+1}`, partno: `mat_partno_${i+1}`, qty: `mat_qty_${i+1}`,
+      unit: `mat_unit_${i+1}`, usage: `mat_usage_${i+1}`, date: `mat_date_${i+1}`, stock: `mat_stock_${i+1}`,
+    })),
+  },
+};
+
+const WL_SINGLE_FIELDS = [
+  "sig_staff","sig_manager","sig_teamlead","date_input","weather_input",
+  "cnt_total","cnt_attend","cnt_day","cnt_night","cnt_off","cnt_rest","cnt_annual","cnt_compoff","cnt_edu","cnt_sick",
+  "names_day","names_night","names_off",
+  "util_water_name","util_water_prev","util_water_today","util_water_usage","util_water_cum","util_water_month",
+  "util_kw_usage","util_kw_cum","util_kw_month",
+];
+
+let wlCenter = null;
+let wlWorkday = null;
+let wlUnsubs = [];
+let wlState = { dayWork: [], dayCheck: [], nightWork: [], nightNote: [], legal: [], material: [] };
+let wlBaseDocRef = null;
+
+// 09:00 기준 근무일 계산 (백엔드 workLogDailyExport와 동일 로직 — 09:00 이전이면 전날로 취급)
+function wlGetWorkday(d) {
+  const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  if (kst.getHours() < 9) kst.setDate(kst.getDate() - 1);
+  const y = kst.getFullYear();
+  const m = String(kst.getMonth()+1).padStart(2,"0");
+  const day = String(kst.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+
+function wlInit() {
+  wlCenter = currentUser.center_name === "Master"
+    ? (document.getElementById("filter-center-event")?.value || "")
+    : currentUser.center_name;
+  if (!wlCenter) return;
+  wlWorkday = wlGetWorkday(new Date());
+  const el = document.getElementById("wl-today-str");
+  if (el) el.textContent = `(${wlWorkday} 근무일)`;
+  wlSubscribe();
+}
+
+function wlSubscribe() {
+  wlUnsubs.forEach(u => u());
+  wlUnsubs = [];
+
+  const docId = `${wlCenter}_${wlWorkday}`;
+  wlBaseDocRef = db.collection("work_logs").doc(docId);
+
+  // 단일값 필드(인원현황/서명/날씨) 구독
+  wlUnsubs.push(wlBaseDocRef.onSnapshot(snap => {
+    const data = snap.exists ? snap.data() : {};
+    for (const fid of WL_SINGLE_FIELDS) {
+      const inp = document.getElementById(fid);
+      if (inp && data[fid] !== undefined && document.activeElement !== inp) inp.value = data[fid];
+    }
+  }, e => console.error("[근무일지] 기본정보 구독 오류:", e)));
+
+  // 줄 단위 섹션 6개 구독
+  for (const key of Object.keys(WL_SECTIONS)) {
+    const sub = WL_SECTIONS[key].sub;
+    const unsub = wlBaseDocRef.collection(sub).orderBy("created_at","asc").onSnapshot(snap => {
+      wlState[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      wlRenderSection(key);
+    }, e => console.error(`[근무일지] ${key} 구독 오류:`, e));
+    wlUnsubs.push(unsub);
+  }
+}
+
+// 본인 글 또는 관리자만 수정 가능
+function wlCanEdit(entry) {
+  if (!entry) return true; // 아직 없는(빈) 슬롯 → 누구나 새로 작성 가능
+  if (currentUser.active === true || currentUser.center_name === "Master") return true;
+  return entry.created_by === currentUser.name;
+}
+
+// 심플 섹션(작업내용 한 줄짜리: dayWork/dayCheck/nightWork/nightNote) 렌더링
+function wlRenderSimpleSection(key) {
+  const meta = WL_SECTIONS[key];
+  const entries = wlState[key];
+  meta.fids.forEach((fid, i) => {
+    const inp = document.getElementById(fid);
+    if (!inp) return;
+    const td = inp.closest("td");
+    const entry = entries[i];
+    if (entry) {
+      inp.value = entry.content || "";
+      const editable = wlCanEdit(entry);
+      inp.readOnly = !editable;
+      td.classList.toggle("wl-locked", !editable);
+      td.classList.toggle("wl-locked-admin", editable && entry.created_by !== currentUser.name);
+      td.classList.remove("wl-active");
+      inp.title = `작성: ${entry.created_by||""}` + (entry.edited_by && entry.edited_by!==entry.created_by ? ` · 수정: ${entry.edited_by}` : "");
+      inp.onblur = editable ? () => wlSaveLine(key, i, inp.value) : null;
+    } else if (i === entries.length) {
+      inp.value = "";
+      inp.readOnly = false;
+      td.classList.remove("wl-locked","wl-locked-admin");
+      td.classList.add("wl-active");
+      inp.title = "";
+      inp.onblur = () => { if (inp.value.trim()) wlSaveLine(key, i, inp.value); };
+    } else {
+      inp.value = "";
+      inp.readOnly = true;
+      td.classList.remove("wl-active","wl-locked-admin");
+      td.classList.add("wl-locked");
+      inp.title = "";
+      inp.onblur = null;
+    }
+  });
+}
+
+// 법정점검 / 자재입출고(여러 하위 필드짜리) 렌더링
+function wlRenderMultiSection(key) {
+  const meta = WL_SECTIONS[key];
+  const entries = wlState[key];
+  meta.rows.forEach((rowFids, i) => {
+    const entry = entries[i];
+    const editable = entry ? wlCanEdit(entry) : true;
+    const isNext = !entry && i === entries.length;
+    Object.keys(rowFids).forEach(sub => {
+      const fid = rowFids[sub];
+      const inp = document.getElementById(fid);
+      if (!inp) return;
+      const td = inp.closest("td");
+      if (entry) {
+        inp.value = entry[sub] || "";
+        inp.readOnly = !editable;
+        td.classList.toggle("wl-locked", !editable);
+        td.classList.toggle("wl-locked-admin", editable && entry.created_by !== currentUser.name);
+        td.classList.remove("wl-active");
+        inp.onblur = editable ? () => wlSaveMultiLine(key, i, rowFids) : null;
+      } else if (isNext) {
+        inp.value = "";
+        inp.readOnly = false;
+        td.classList.remove("wl-locked","wl-locked-admin");
+        td.classList.add("wl-active");
+        inp.onblur = () => wlSaveMultiLine(key, i, rowFids);
+      } else {
+        inp.value = "";
+        inp.readOnly = true;
+        td.classList.add("wl-locked");
+        td.classList.remove("wl-active","wl-locked-admin");
+        inp.onblur = null;
+      }
+    });
+  });
+}
+
+function wlRenderSection(key) {
+  if (WL_SECTIONS[key].kind === "simple") wlRenderSimpleSection(key);
+  else wlRenderMultiSection(key);
+}
+
+// 심플 섹션 한 줄 저장 (새 줄 추가 or 기존 줄 수정)
+async function wlSaveLine(key, idx, value) {
+  if (!value || !value.trim()) return;
+  const meta = WL_SECTIONS[key];
+  const entries = wlState[key];
+  const sub = wlBaseDocRef.collection(meta.sub);
+  try {
+    if (entries[idx]) {
+      await sub.doc(entries[idx].id).update({
+        content: value.trim(),
+        edited_by: currentUser.name,
+        edited_at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await sub.add({
+        content: value.trim(),
+        created_by: currentUser.name,
+        created_at: firebase.firestore.FieldValue.serverTimestamp(),
+        edited_by: currentUser.name,
+        edited_at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  } catch (e) {
+    console.error(`[근무일지] ${key} 저장 실패:`, e);
+    alert("저장 중 오류가 발생했습니다.");
+  }
+}
+
+// 멀티필드 섹션(법정점검/자재입출고) 한 줄 저장
+async function wlSaveMultiLine(key, idx, rowFids) {
+  const meta = WL_SECTIONS[key];
+  const entries = wlState[key];
+  const sub = wlBaseDocRef.collection(meta.sub);
+  const payload = {};
+  let hasValue = false;
+  for (const subKey of Object.keys(rowFids)) {
+    const inp = document.getElementById(rowFids[subKey]);
+    payload[subKey] = inp ? inp.value.trim() : "";
+    if (payload[subKey]) hasValue = true;
+  }
+  if (!hasValue) return;
+  try {
+    if (entries[idx]) {
+      await sub.doc(entries[idx].id).update({
+        ...payload,
+        edited_by: currentUser.name,
+        edited_at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await sub.add({
+        ...payload,
+        created_by: currentUser.name,
+        created_at: firebase.firestore.FieldValue.serverTimestamp(),
+        edited_by: currentUser.name,
+        edited_at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  } catch (e) {
+    console.error(`[근무일지] ${key} 저장 실패:`, e);
+    alert("저장 중 오류가 발생했습니다.");
+  }
+}
+
+// 기본정보(인원현황/서명/날씨/유틸리티 지침) 저장 — 문서 자체에 merge 저장
+async function wlSaveBaseInfo() {
+  if (!wlBaseDocRef) return;
+  const payload = {};
+  for (const fid of WL_SINGLE_FIELDS) {
+    const inp = document.getElementById(fid);
+    if (inp) payload[fid] = inp.value;
+  }
+  payload.center_name = wlCenter;
+  payload.workday = wlWorkday;
+  payload.updated_at = firebase.firestore.FieldValue.serverTimestamp();
+  try {
+    await wlBaseDocRef.set(payload, { merge: true });
+    alert("기본정보가 저장되었습니다.");
+  } catch (e) {
+    console.error("[근무일지] 기본정보 저장 실패:", e);
+    alert("저장 중 오류가 발생했습니다.");
+  }
+}
+
 </script>
 </body>
 </html>
