@@ -1949,6 +1949,44 @@ function wlRenderAttendanceTable(rows, todayDay) {
   return html;
 }
 
+// ──────────────────────────────────────────────
+// 근무일지 표: Enter = 아래 칸 이동, 아래가 없거나 잠겨있으면 Tab과 동일하게 다음 칸 이동
+// ──────────────────────────────────────────────
+(function wlSetupEnterNavigation() {
+  const table = document.querySelector("table.wl-sheet");
+  if (!table) return;
+
+  table.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const inp = e.target;
+    if (!inp || inp.tagName !== "INPUT") return;
+    e.preventDefault(); // 폼이 없어서 원래도 제출은 안 되지만, 브라우저 기본 동작(달력 열림 등) 방지
+
+    // 1) id 끝 숫자만 +1 한 "같은 컬럼 아래 칸" 먼저 시도
+    const m = inp.id.match(/^(.*_)(\d+)$/);
+    if (m) {
+      const nextId  = `${m[1]}${parseInt(m[2], 10) + 1}`;
+      const nextInp = document.getElementById(nextId);
+      if (nextInp && !nextInp.readOnly && !nextInp.disabled) {
+        nextInp.focus();
+        nextInp.select?.();
+        return;
+      }
+    }
+
+    // 2) 아래 칸이 없거나(마지막 행) 잠겨있으면 → Tab과 동일하게 표 안의 다음 입력칸으로
+    const all = Array.from(table.querySelectorAll("input"));
+    const idx = all.indexOf(inp);
+    for (let i = idx + 1; i < all.length; i++) {
+      if (!all[i].disabled) {
+        all[i].focus();
+        all[i].select?.();
+        return;
+      }
+    }
+  });
+})();  
+
 </script>
 </body>
 </html>
