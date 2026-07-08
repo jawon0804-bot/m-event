@@ -439,6 +439,26 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-locked input { background: #f3f4f6 !important; color: var(--gray5); cursor: default; }
 .wl-locked-admin input { background: #fff7ed !important; cursor: pointer; }
 .wl-active input { background: #eff6ff !important; }
+
+/* ── 근무일지: 월별 점검표 다운로드 박스 ── */
+.wl-month-panel { padding: 10px 24px 0; display: flex; flex-direction: column; gap: 8px; }
+.wl-month-panel-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--navy); }
+.wl-year-nav {
+  background: #fff; border: 1px solid var(--gray2); border-radius: 4px;
+  width: 24px; height: 24px; cursor: pointer; color: var(--navy); font-size: 13px;
+}
+.wl-year-nav:hover { background: var(--gray1); }
+.wl-month-grid { display: grid; grid-template-columns: repeat(6, 56px); gap: 6px; }
+.wl-month-box {
+  border: 1px solid var(--gray2); border-radius: 6px; padding: 8px 4px;
+  text-align: center; font-size: 12px; font-weight: 600; color: var(--gray3);
+  background: var(--gray0); cursor: default; transition: background .1s;
+}
+.wl-month-box.available { color: #fff; background: var(--green); cursor: pointer; }
+.wl-month-box.available:hover { background: #15803d; }
+@media (max-width: 600px) {
+  .wl-month-grid { grid-template-columns: repeat(4, 1fr); }
+}
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -554,6 +574,15 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
       <button class="search-btn" onclick="wlSaveBaseInfo()">
         <i class="fa-solid fa-floppy-disk"></i> 기본정보 저장(인원현황/서명/날씨)
       </button>
+    </div>
+    <div class="wl-month-panel">
+      <div class="wl-month-panel-head">
+        <button class="wl-year-nav" onclick="wlChangeYear(-1)">‹</button>
+        <span id="wl-month-year-label"></span>
+        <button class="wl-year-nav" onclick="wlChangeYear(1)">›</button>
+        <span style="font-size:12px;color:var(--gray4);font-weight:400;margin-left:4px">월별 점검표 다운로드 (초록 = 다운로드 가능)</span>
+      </div>
+      <div class="wl-month-grid" id="wl-month-grid"></div>
     </div>
     <div style="overflow-x:auto;padding:16px 24px">
       <table class="wl-sheet">
@@ -1487,6 +1516,54 @@ function wlInit() {
   const dateEl = document.getElementById("date_input");
   if (dateEl && !dateEl.value) dateEl.value = wlWorkday;
   wlSubscribe();
+  wlInitMonthPanel();
+}
+
+// ──────────────────────────────────────────────
+// 근무일지: 월별 점검표 다운로드 박스 (1~12월)
+// ──────────────────────────────────────────────
+let wlDownloadYear = null;
+
+function wlInitMonthPanel() {
+  // 첫 진입 시에만 연도를 오늘 기준으로 세팅 (연도 이동 후 재호출돼도 유지되도록)
+  if (wlDownloadYear === null) wlDownloadYear = new Date().getFullYear();
+  wlRenderMonthPanel();
+}
+
+function wlChangeYear(delta) {
+  wlDownloadYear += delta;
+  wlRenderMonthPanel();
+}
+
+// Storage에서 work_log/{center}/{year}년_{m}월_점검표.xlsx 12개월치 존재 여부를 병렬 확인.
+// 존재하는 달(=지금까지 workLogDailyExport가 시트를 채워 넣은 달)만 다운로드 가능하게 표시.
+// ※ 진행 중인 달은 오늘까지 작성된 날짜의 시트만 들어있는 "부분 완성" 파일이 정상 동작임
+//   (예: 7월 8일에 다운로드하면 7월 7일 시트까지만 존재 — workLogDailyExport가 매일 09:00에
+//   전날 시트를 추가하는 구조이므로 당연한 결과)
+async function wlRenderMonthPanel() {
+  const label = document.getElementById("wl-month-year-label");
+  if (label) label.textContent = `${wlDownloadYear}년`;
+  const grid = document.getElementById("wl-month-grid");
+  if (!grid || !wlCenter) return;
+
+  grid.innerHTML = Array.from({ length: 12 }, (_, i) =>
+    `<div class="wl-month-box" data-month="${i + 1}">${i + 1}월</div>`).join("");
+
+  const results = await Promise.allSettled(
+    Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
+      const path = `work_log/${wlCenter}/${wlDownloadYear}년_${m}월_점검표.xlsx`;
+      return storage.ref(path).getDownloadURL().then(url => ({ m, url }));
+    })
+  );
+
+  results.forEach(r => {
+    if (r.status !== "fulfilled") return; // 파일 없음(storage/object-not-found) → 회색 박스 그대로 둠
+    const box = grid.querySelector(`.wl-month-box[data-month="${r.value.m}"]`);
+    if (!box) return;
+    box.classList.add("available");
+    box.title = "클릭해서 다운로드";
+    box.addEventListener("click", () => window.open(r.value.url, "_blank"));
+  });
 }
 
 function wlSubscribe() {
