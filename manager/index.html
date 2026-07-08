@@ -8,6 +8,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <style>
@@ -775,8 +777,10 @@ const firebaseConfig = {
   appId:             "1:267082158406:web:eba0f68dde60931aea9547",
 };
 firebase.initializeApp(firebaseConfig);
-const db      = firebase.firestore();
-const storage = firebase.storage();
+const db        = firebase.firestore();
+const storage   = firebase.storage();
+const auth      = firebase.auth();
+const functions = firebase.functions();
 
 // ── 상태 ──
 const DASHBOARD_API = "https://facility-dashboard-267082158406.asia-northeast3.run.app";
@@ -824,53 +828,67 @@ function isOver90Days(start, end) {
 }
 
 // ──────────────────────────────────────────────
-// 로그인
+// 로그인 — 서버(Cloud Function: loginWithCredentials)에서 판정 + Custom Token 발급
+// 화면상 UX(이름+전화번호 입력)는 기존과 동일. 뒤에서만 진짜 Firebase Auth로 바뀜.
 // ──────────────────────────────────────────────
 async function login() {
   const name  = document.getElementById("login-name").value.trim();
   const phone = document.getElementById("login-phone").value.replace(/[^0-9]/g, "");
   const errEl = document.getElementById("login-error");
+  const btnEl = document.querySelector(".login-btn");
   errEl.textContent = "";
   if (!name || !phone) { errEl.textContent = "이름과 전화번호를 입력하세요."; return; }
+
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = "로그인 중..."; }
   try {
-    const snap = await db.collection("UserDB").where("name","==",name).limit(5).get();
-    if (snap.empty) { errEl.textContent = "등록되지 않은 이름입니다."; return; }
-    const matched = snap.docs.find(d => {
-      const p = (d.data().phone || "").replace(/[^0-9]/g,"");
-      return p === phone;
-    });
-    if (!matched) { errEl.textContent = "전화번호가 일치하지 않습니다."; return; }
-    currentUser = matched.data();
-    sessionStorage.setItem("m_user", JSON.stringify(currentUser));
+    const callLogin = functions.httpsCallable("loginWithCredentials");
+    const res = await callLogin({ name, phone, app: "m-event" }); // password는 향후 도입 시 여기에 추가
+    const { token, user } = res.data;
+
+    await auth.signInWithCustomToken(token); // 성공하면 onAuthStateChanged가 이어서 처리
+    currentUser = user;
     showApp();
-  } catch(e) {
-    console.error("로그인 오류:", e); // 원인(권한/네트워크) 구분을 위해 로깅
-    errEl.textContent = "로그인 중 오류가 발생했습니다.";
+  } catch (e) {
+    console.error("로그인 오류:", e);
+    // HttpsError의 message는 "resource-exhausted: 로그인 시도가..." 형태로 오므로 콜론 앞부분 제거
+    errEl.textContent = (e.message || "").replace(/^[a-z-]+:\s*/i, "") || "로그인 중 오류가 발생했습니다.";
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = "로그인"; }
   }
 }
 
 function logout() {
   if (unsubscribe) unsubscribe();
   currentUser = null; allEvents = [];
-  sessionStorage.removeItem("m_user");
-  document.getElementById("app").style.display          = "none";
-  document.getElementById("login-screen").style.display = "flex";
+  auth.signOut(); // onAuthStateChanged(null)이 이어서 로그인 화면 전환 처리
 }
 
-window.onload = () => {
-  // sessionStorage 손상/필수 필드 누락에 방어 — 실패해도 아래 초기화는 계속 진행
-  try {
-    const saved = JSON.parse(sessionStorage.getItem("m_user") || "null");
-    if (saved && saved.name && saved.center_name) {
-      currentUser = saved;
-      showApp();
-    } else if (saved) {
-      sessionStorage.removeItem("m_user");
+// 새로고침/재방문 시 Firebase Auth가 세션을 자체 관리 (sessionStorage 더 이상 불필요).
+// 커스텀 클레임(name/center_name/active)에서 currentUser를 복원함.
+auth.onAuthStateChanged(async (fbUser) => {
+  if (fbUser) {
+    if (!currentUser) {
+      try {
+        const idTokenResult = await fbUser.getIdTokenResult();
+        currentUser = {
+          name: idTokenResult.claims.name || "",
+          center_name: idTokenResult.claims.center_name || "",
+          active: idTokenResult.claims.active === true,
+        };
+        showApp();
+      } catch (e) {
+        console.error("세션 복원 실패:", e);
+        auth.signOut();
+      }
     }
-  } catch(e) {
-    console.warn("세션 복원 실패:", e);
-    sessionStorage.removeItem("m_user");
+  } else {
+    currentUser = null;
+    document.getElementById("app").style.display          = "none";
+    document.getElementById("login-screen").style.display = "flex";
   }
+});
+
+window.onload = () => {
   const today    = new Date();
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
   ["excel","photo","report"].forEach(k => {
