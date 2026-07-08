@@ -6,7 +6,9 @@
  *   onIssueUpdate          : events 문서 status 변경 시 → 조치/완료 메일
  *   issueReminderScheduler : 매일 09:00 (Asia/Seoul) — 3일 이상 미조치 이벤트 재알림
  *   workLogDailyExport     : 매일 09:00 (Asia/Seoul) — 방금 끝난 근무일(어제 09:00~오늘 09:00)의
- *                            work_logs 데이터를 센터별 월별 엑셀 파일에 시트로 반영
+ *                            work_logs 데이터를, Storage의 센터별 원본 양식
+ *                            (templates/{center}/work_log.xlsx, 시트 "양식")을 복제해
+ *                            센터별 월별 엑셀 파일(work_log/{center}/...)에 날짜 시트로 반영
  *
  * [배포]
  *   firebase deploy --only functions:onInspectionLog,functions:onIssueUpdate,functions:issueReminderScheduler,functions:workLogDailyExport
@@ -278,10 +280,12 @@ exports.issueReminderScheduler = onSchedule(
 
 // ==============================================================================
 // [근무일지 → 엑셀] 좌표 정의
-// 원본 파일(work_log.xlsx, 시트 "양식") 실측 기준 (2026-07-07 확인).
-// ⚠️ D28/D30(주간업무 3·5번째 줄)은 원본 파일에 병합이 빠져있던 부분 —
-//    다른 줄과 동일하게 병합 처리하기로 함 (실수로 확인됨).
-// 라벨/병합 구조를 바꾸려면 이 상수와 프런트엔드 wl-sheet 테이블 마크업을 함께 수정해야 함.
+// 실제 라벨/서식/병합은 Storage 템플릿(templates/{center}/work_log.xlsx, 시트 "양식")에
+// 들어있고, 여기 좌표는 "그 템플릿의 어느 셀에 어떤 값을 넣을지"만 정의함
+// (2026-07-07 실측 기준. ⚠️ D28/D30은 원본에 병합이 빠져있던 부분을 다른 줄과 동일하게
+// 병합 처리하기로 함 — 실수로 확인됨. 템플릿 자체를 수정하면 이 좌표도 함께 맞춰야 함.)
+// 라벨/병합 구조를 바꾸려면 Storage의 템플릿 파일과 프런트엔드 wl-sheet 테이블 마크업,
+// 그리고 이 좌표 상수까지 셋을 함께 수정해야 함.
 // ==============================================================================
 const WORKLOG_LAYOUT = {
   title: "B2:J3",
@@ -319,151 +323,139 @@ const WORKLOG_LAYOUT = {
   })),
 };
 
-// 셀(또는 병합 범위)에 값 쓰고 기본 서식(테두리/정렬) 적용
-function wlSetCell(ws, range, value, opts = {}) {
+// 셀(또는 병합 범위)에 "값만" 씀 — 라벨/서식/병합/테두리는 템플릿이 이미 갖고 있으므로 건드리지 않음
+function wlSetValue(ws, range, value) {
+  if (value === undefined || value === "") return;
   const first = range.split(":")[0];
-  if (range.includes(":")) ws.mergeCells(range);
   const cell = ws.getCell(first);
-  if (value !== undefined) cell.value = value;
-  cell.alignment = { vertical: "middle", horizontal: opts.align || "center", wrapText: !!opts.wrap };
-  if (opts.bold) cell.font = { bold: true, size: opts.size || 11 };
-  if (!opts.noBorder) {
-    cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-  }
+  cell.value = value;
   return cell;
 }
 
-// work_logs 데이터를 워크시트에 채워 넣음 (신규 시트 기준 — 라벨/구조 전부 여기서 생성)
-function fillWorkLogSheet(ws, payload, center) {
+// work_logs 데이터를 (템플릿에서 복제된) 워크시트의 정해진 좌표에만 값으로 채워 넣음
+// ※ 라벨 텍스트/병합/테두리는 templates/{center}/work_log.xlsx 의 "양식" 시트를 그대로 복제해서
+//   이미 존재하므로 여기서는 절대 새로 만들지 않음 (cloneTemplateSheet 참고)
+function fillWorkLogValues(ws, payload, center) {
   const L = WORKLOG_LAYOUT;
   const base = payload.base || {};
 
-  ws.columns = [
-    {}, { width: 11 }, { width: 11 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
-    { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 13 }, { width: 13 }, { width: 13 },
-  ]; // A(미사용)~N
+  // 제목만 센터명이 들어가므로 템플릿 값을 덮어씀 (템플릿 자체엔 플레이스홀더/공백으로 둬도 됨)
+  wlSetValue(ws, L.title, `${center} 시설 업무일지`);
 
-  wlSetCell(ws, L.title, `${center} 시설 업무일지`, { bold: true, size: 16 });
-  wlSetCell(ws, "L2", "담  당", { bold: true });
-  wlSetCell(ws, "M2", "과  장", { bold: true });
-  wlSetCell(ws, "N2", "팀  장", { bold: true });
-  wlSetCell(ws, L.sign.staff, base.sig_staff || "");
-  wlSetCell(ws, L.sign.manager, base.sig_manager || "");
-  wlSetCell(ws, L.sign.teamlead, base.sig_teamlead || "");
+  wlSetValue(ws, L.sign.staff, base.sig_staff || "");
+  wlSetValue(ws, L.sign.manager, base.sig_manager || "");
+  wlSetValue(ws, L.sign.teamlead, base.sig_teamlead || "");
 
-  const dateCell = wlSetCell(ws, L.date, base.date_input || "");
-  if (base.date_input) dateCell.numFmt = "yyyy-mm-dd";
-  wlSetCell(ws, "D5", "날 씨 :", { bold: true });
-  wlSetCell(ws, L.weather, base.weather_input || "", { noBorder: true, align: "left" });
+  const dateCell = wlSetValue(ws, L.date, base.date_input || "");
+  if (dateCell && base.date_input) dateCell.numFmt = "yyyy-mm-dd";
+  wlSetValue(ws, L.weather, base.weather_input || "");
 
-  wlSetCell(ws, "B6", "인 력 현 황", { bold: true });
-  wlSetCell(ws, "C6:D6", "총  원", { bold: true });
-  wlSetCell(ws, "E6:F6", "출 근 자", { bold: true });
-  wlSetCell(ws, "G6", "주  간", { bold: true });
-  wlSetCell(ws, "H6", "야 간", { bold: true });
-  wlSetCell(ws, "I6", "비  번", { bold: true });
-  wlSetCell(ws, "J6", "휴  무", { bold: true });
-  wlSetCell(ws, "K6", "연  차", { bold: true });
-  wlSetCell(ws, "L6", "대휴", { bold: true });
-  wlSetCell(ws, "M6", "교육", { bold: true });
-  wlSetCell(ws, "N6", "병가", { bold: true });
+  wlSetValue(ws, L.personnel.total, base.cnt_total || "");
+  wlSetValue(ws, L.personnel.attend, base.cnt_attend || "");
+  wlSetValue(ws, L.personnel.day, base.cnt_day || "");
+  wlSetValue(ws, L.personnel.night, base.cnt_night || "");
+  wlSetValue(ws, L.personnel.off, base.cnt_off || "");
+  wlSetValue(ws, L.personnel.rest, base.cnt_rest || "");
+  wlSetValue(ws, L.personnel.annual, base.cnt_annual || "");
+  wlSetValue(ws, L.personnel.compoff, base.cnt_compoff || "");
+  wlSetValue(ws, L.personnel.edu, base.cnt_edu || "");
+  wlSetValue(ws, L.personnel.sick, base.cnt_sick || "");
+  wlSetValue(ws, L.personnel.namesDay, base.names_day || "");
+  wlSetValue(ws, L.personnel.namesNight, base.names_night || "");
+  wlSetValue(ws, L.personnel.namesOff, base.names_off || "");
 
-  wlSetCell(ws, L.personnel.total, base.cnt_total || "");
-  wlSetCell(ws, L.personnel.attend, base.cnt_attend || "");
-  wlSetCell(ws, L.personnel.day, base.cnt_day || "");
-  wlSetCell(ws, L.personnel.night, base.cnt_night || "");
-  wlSetCell(ws, L.personnel.off, base.cnt_off || "");
-  wlSetCell(ws, L.personnel.rest, base.cnt_rest || "");
-  wlSetCell(ws, L.personnel.annual, base.cnt_annual || "");
-  wlSetCell(ws, L.personnel.compoff, base.cnt_compoff || "");
-  wlSetCell(ws, L.personnel.edu, base.cnt_edu || "");
-  wlSetCell(ws, L.personnel.sick, base.cnt_sick || "");
-
-  wlSetCell(ws, "C8:F8", "주간 근무자", { bold: true });
-  wlSetCell(ws, "G8:J8", "야간 근무자", { bold: true });
-  wlSetCell(ws, "K8:N8", "비번/휴무/교육", { bold: true });
-  wlSetCell(ws, L.personnel.namesDay, base.names_day || "", { align: "left" });
-  wlSetCell(ws, L.personnel.namesNight, base.names_night || "", { align: "left" });
-  wlSetCell(ws, L.personnel.namesOff, base.names_off || "", { align: "left" });
-
-  wlSetCell(ws, "B11:N11", "유틸리티 지침 현황", { bold: true, size: 13 });
-  wlSetCell(ws, "B13:E13", "구  분", { bold: true });
-  wlSetCell(ws, "F13:G13", "단 위", { bold: true });
-  wlSetCell(ws, "H13:I13", "전일 지침", { bold: true });
-  wlSetCell(ws, "J13:K13", "금일 지침", { bold: true });
-  wlSetCell(ws, "L13", "금일사용량", { bold: true });
-  wlSetCell(ws, "M13", "일간누적량", { bold: true });
-  wlSetCell(ws, "N13", "월간사용량", { bold: true });
-
-  wlSetCell(ws, "B14", "상 수 도", { bold: true });
-  wlSetCell(ws, L.utilWater.name, base.util_water_name || "", { align: "left" });
-  wlSetCell(ws, "F14:G14", "㎥");
-  wlSetCell(ws, L.utilWater.prev, base.util_water_prev || "");
-  wlSetCell(ws, L.utilWater.today, base.util_water_today || "");
-  wlSetCell(ws, L.utilWater.usage, base.util_water_usage || "");
-  wlSetCell(ws, L.utilWater.cum, base.util_water_cum || "");
-  wlSetCell(ws, L.utilWater.month, base.util_water_month || "");
-
-  wlSetCell(ws, "B15:K15", "합    계  ( kW )", { bold: true });
-  wlSetCell(ws, L.utilKw.usage, base.util_kw_usage || "");
-  wlSetCell(ws, L.utilKw.cum, base.util_kw_cum || "");
-  wlSetCell(ws, L.utilKw.month, base.util_kw_month || "");
-
-  wlSetCell(ws, "B17:N17", "법 정 점 검  및  대 관 업 무 ,  공 사 관 련", { bold: true, size: 13 });
-  wlSetCell(ws, "B18", "구   분", { bold: true });
-  wlSetCell(ws, "C18:D18", "일 정", { bold: true });
-  wlSetCell(ws, "E18:F18", "업 체 명", { bold: true });
-  wlSetCell(ws, "G18:H18", "담 당 자(연락처)", { bold: true });
-  wlSetCell(ws, "I18:N18", "업 무  ( 공 사 ) 내용", { bold: true });
+  wlSetValue(ws, L.utilWater.name, base.util_water_name || "");
+  wlSetValue(ws, L.utilWater.prev, base.util_water_prev || "");
+  wlSetValue(ws, L.utilWater.today, base.util_water_today || "");
+  wlSetValue(ws, L.utilWater.usage, base.util_water_usage || "");
+  wlSetValue(ws, L.utilWater.cum, base.util_water_cum || "");
+  wlSetValue(ws, L.utilWater.month, base.util_water_month || "");
+  wlSetValue(ws, L.utilKw.usage, base.util_kw_usage || "");
+  wlSetValue(ws, L.utilKw.cum, base.util_kw_cum || "");
+  wlSetValue(ws, L.utilKw.month, base.util_kw_month || "");
 
   L.legalRows.forEach((r, i) => {
     const entry = (payload.legal || [])[i];
-    wlSetCell(ws, `B${r.row}`, String(i + 1));
-    wlSetCell(ws, r.sched, entry?.sched || "");
-    wlSetCell(ws, r.company, entry?.company || "");
-    wlSetCell(ws, r.contact, entry?.contact || "");
-    wlSetCell(ws, r.content, entry?.content || "", { align: "left" });
+    if (!entry) return;
+    wlSetValue(ws, r.sched, entry.sched || "");
+    wlSetValue(ws, r.company, entry.company || "");
+    wlSetValue(ws, r.contact, entry.contact || "");
+    wlSetValue(ws, r.content, entry.content || "");
   });
-
-  wlSetCell(ws, "B24:B25", "구    분", { bold: true });
-  wlSetCell(ws, "C24:K25", "주 간  업 무", { bold: true });
-  wlSetCell(ws, "L24:N25", "일 상  점 검", { bold: true });
-  wlSetCell(ws, "B26:B54", "업 무 내 용", { bold: true });
-  wlSetCell(ws, "C26:C35", "작업내용", { bold: true, wrap: true });
 
   L.dayRows.forEach((r, i) => {
-    wlSetCell(ws, r.work, (payload.dayWork || [])[i]?.content || "", { align: "left" });
-    wlSetCell(ws, r.check, (payload.dayCheck || [])[i]?.content || "");
+    wlSetValue(ws, r.work, (payload.dayWork || [])[i]?.content || "");
+    wlSetValue(ws, r.check, (payload.dayCheck || [])[i]?.content || "");
   });
-
-  wlSetCell(ws, "C36:K37", "야 간  업 무", { bold: true });
-  wlSetCell(ws, "L36:N37", "특이사항", { bold: true });
-  wlSetCell(ws, "C38:C47", "작업내용", { bold: true, wrap: true });
 
   L.nightRows.forEach((r, i) => {
-    wlSetCell(ws, r.work, (payload.nightWork || [])[i]?.content || "", { align: "left" });
-    wlSetCell(ws, r.note, (payload.nightNote || [])[i]?.content || "");
+    wlSetValue(ws, r.work, (payload.nightWork || [])[i]?.content || "");
+    wlSetValue(ws, r.note, (payload.nightNote || [])[i]?.content || "");
   });
-
-  wlSetCell(ws, "C48:N48", "자재 입출고 내역", { bold: true, size: 13 });
-  wlSetCell(ws, "C49", "작업번호", { bold: true });
-  wlSetCell(ws, "D49:G49", "PART NO.", { bold: true });
-  wlSetCell(ws, "H49", "수량", { bold: true });
-  wlSetCell(ws, "I49", "단위", { bold: true });
-  wlSetCell(ws, "J49:L49", "사용 내용", { bold: true });
-  wlSetCell(ws, "M49", "사용날짜", { bold: true });
-  wlSetCell(ws, "N49", "재고", { bold: true });
 
   L.materialRows.forEach((r, i) => {
     const entry = (payload.material || [])[i];
-    wlSetCell(ws, r.workno, entry?.workno || "");
-    wlSetCell(ws, r.partno, entry?.partno || "", { align: "left" });
-    wlSetCell(ws, r.qty, entry?.qty || "");
-    wlSetCell(ws, r.unit, entry?.unit || "");
-    wlSetCell(ws, r.usage, entry?.usage || "", { align: "left" });
-    wlSetCell(ws, r.date, entry?.date || "");
-    wlSetCell(ws, r.stock, entry?.stock || "");
+    if (!entry) return;
+    wlSetValue(ws, r.workno, entry.workno || "");
+    wlSetValue(ws, r.partno, entry.partno || "");
+    wlSetValue(ws, r.qty, entry.qty || "");
+    wlSetValue(ws, r.unit, entry.unit || "");
+    wlSetValue(ws, r.usage, entry.usage || "");
+    wlSetValue(ws, r.date, entry.date || "");
+    wlSetValue(ws, r.stock, entry.stock || "");
   });
+}
+
+// ==============================================================================
+// [근무일지 → 엑셀] 템플릿 로드 & 복제
+// ==============================================================================
+const WORKLOG_TEMPLATE_SHEET = "양식"; // 템플릿 파일(work_log.xlsx) 안의 기준 시트명
+
+// Storage에서 센터별 원본 양식 템플릿(templates/{center}/work_log.xlsx)을 불러와
+// "양식" 시트(ExcelJS Worksheet 객체)를 반환. 없으면 null.
+async function loadWorkLogTemplate(center) {
+  const templatePath = `templates/${center}/work_log.xlsx`;
+  const templateFile = bucket.file(templatePath);
+  const [exists] = await templateFile.exists();
+  if (!exists) {
+    console.warn(`[근무일지 내보내기] 템플릿 없음: ${templatePath}`);
+    return null;
+  }
+  const buf = await templateFile.download();
+  const tplWorkbook = new ExcelJS.Workbook();
+  await tplWorkbook.xlsx.load(buf[0]);
+  const tplSheet = tplWorkbook.getWorksheet(WORKLOG_TEMPLATE_SHEET);
+  if (!tplSheet) {
+    console.warn(`[근무일지 내보내기] 템플릿에 "${WORKLOG_TEMPLATE_SHEET}" 시트가 없음: ${templatePath}`);
+    return null;
+  }
+  return tplSheet;
+}
+
+// 템플릿 시트를 대상 워크북에 새 시트(sheetName)로 복제
+// (열 너비/행 높이/병합 범위/셀 값·서식까지 그대로 복사 — ExcelJS는 워크북 간 시트 이동을
+//  직접 지원하지 않아 셀 단위로 복사함)
+function cloneTemplateSheet(targetWorkbook, tplSheet, sheetName) {
+  const ws = targetWorkbook.addWorksheet(sheetName, { views: tplSheet.views });
+
+  ws.columns = tplSheet.columns.map(col => ({ width: col?.width }));
+
+  (tplSheet.model.merges || []).forEach(range => {
+    try { ws.mergeCells(range); } catch (e) { console.warn(`[근무일지 내보내기] 병합 복제 실패(${range}):`, e.message); }
+  });
+
+  tplSheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    const newRow = ws.getRow(rowNumber);
+    if (row.height) newRow.height = row.height;
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const newCell = newRow.getCell(colNumber);
+      newCell.value = cell.value;
+      if (cell.style) newCell.style = { ...cell.style };
+    });
+    newRow.commit();
+  });
+
+  return ws;
 }
 
 // KST 기준 연/월/일 파트 추출 (프런트엔드 wlGetWorkday와 동일 원리 — Intl 사용, 로캘 파싱 문제 없음)
@@ -515,6 +507,13 @@ exports.workLogDailyExport = onSchedule(
           payload[sub] = subSnap.docs.map(d => d.data());
         }
 
+        // 센터별 원본 양식 템플릿 로드 (없으면 이 센터는 스킵 — 다른 센터는 계속 진행)
+        const tplSheet = await loadWorkLogTemplate(center);
+        if (!tplSheet) {
+          console.error(`[근무일지 내보내기] ${center} 템플릿 없어 스킵 (templates/${center}/work_log.xlsx 확인 필요)`);
+          continue;
+        }
+
         const fileName = `${wy}년_${wm}월_점검표.xlsx`;
         const filePath = `work_log/${center}/${fileName}`;
         const file = bucket.file(filePath);
@@ -530,8 +529,8 @@ exports.workLogDailyExport = onSchedule(
         const existingSheet = workbook.getWorksheet(sheetName);
         if (existingSheet) workbook.removeWorksheet(existingSheet.id); // 같은 날짜 재실행 시 덮어쓰기
 
-        const ws = workbook.addWorksheet(sheetName);
-        fillWorkLogSheet(ws, payload, center);
+        const ws = cloneTemplateSheet(workbook, tplSheet, sheetName); // 템플릿을 새 날짜 시트로 복제
+        fillWorkLogValues(ws, payload, center);                       // 정해진 좌표에 값만 채움
 
         const outBuf = await workbook.xlsx.writeBuffer();
         await file.save(outBuf, {
