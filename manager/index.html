@@ -471,19 +471,24 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 }
 
 /* ── 출근부 원본 미리보기 표 ──
-   행 종류: wl-att-header(제목/센터명/컬럼헤더/날짜/요일) vs wl-att-data(실제 근무 기록) */
+   행 종류: wl-att-title(날짜행 위 전부) / wl-att-date(날짜 숫자행) / wl-att-day(요일행) / wl-att-data(실제 근무 기록) */
 .wl-att-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
 .wl-att-table td { border: 1px solid var(--gray2); padding: 3px 7px; text-align: center; }
 
-/* 헤더 행: 배경/글자색을 데이터 행과 뚜렷이 구분 + 스크롤 시 상단 고정 */
-.wl-att-table tr.wl-att-header td {
-  background: var(--gray1);
-  color: var(--navy);
-  font-weight: 700;
-  border-color: #b9c2cc;
-  position: sticky;
-  top: 0;
-  z-index: 2;
+/* 제목행 (제목/센터명 등 날짜행 위 전부) */
+.wl-att-table tr.wl-att-title td {
+  background: #dbe4f0; color: var(--navy); font-weight: 700;
+  border-color: #aebdd1; position: sticky; top: 0; z-index: 2;
+}
+/* 날짜행 (1,2,3...31) */
+.wl-att-table tr.wl-att-date td {
+  background: #9fb3cc; color: #fff; font-weight: 700;
+  border-color: #7f96b3; position: sticky; top: 0; z-index: 2;
+}
+/* 요일행 (수,목,금...) */
+.wl-att-table tr.wl-att-day td {
+  background: #c3d0e0; color: var(--navy); font-weight: 600;
+  border-color: #a3b4cb; position: sticky; top: 0; z-index: 2;
 }
 
 /* 데이터 행: 흰 배경 + 진한 격자선 + 줄무늬(짝수 행) */
@@ -495,12 +500,16 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-att-table tr.wl-att-data:nth-child(even) td { background: #f7f9fb; }
 
 .wl-att-table td:first-child { position: sticky; left: 0; z-index: 1; text-align: left; font-weight: 600; }
-.wl-att-table tr.wl-att-header td:first-child { z-index: 3; background: var(--gray1); }
+.wl-att-table tr.wl-att-title td:first-child { z-index: 3; background: #dbe4f0; }
+.wl-att-table tr.wl-att-date td:first-child  { z-index: 3; background: #9fb3cc; }
+.wl-att-table tr.wl-att-day td:first-child   { z-index: 3; background: #c3d0e0; }
 .wl-att-table tr.wl-att-data td:first-child { background: #fff; }
 .wl-att-table tr.wl-att-data:nth-child(even) td:first-child { background: #f7f9fb; }
 
 /* 오늘 날짜 열 강조 — 헤더 구간과 데이터 구간에서 명확히 다른 톤으로 구분 */
-.wl-att-table tr.wl-att-header td.wl-att-today { background: #f7c9dc !important; color: var(--navy); }
+.wl-att-table tr.wl-att-title td.wl-att-today,
+.wl-att-table tr.wl-att-date td.wl-att-today,
+.wl-att-table tr.wl-att-day td.wl-att-today { background: #ec4899 !important; color: #fff; }
 .wl-att-table tr.wl-att-data td.wl-att-today  { background: #ffd9e8 !important; color: #ad1457; font-weight: 700; border-left: 2px solid #ec4899; border-right: 2px solid #ec4899; }
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -2090,8 +2099,7 @@ function wlRenderAttendanceTable(rows, todayDay, merges) {
     const idx = rows[r].findIndex(v => String(v).trim() !== "" && Number(String(v).trim()) === todayDay);
     if (idx > -1) { todayRow = r; todayCol = idx; break; }
   }
-  // 날짜 행 다음 줄(요일 행)까지 헤더로 간주. 못 찾으면 안전하게 첫 행만 헤더 처리.
-  const dataStartRow = todayRow > -1 ? todayRow + 2 : 1;
+  // 날짜 행 다음 줄이 요일 행 — 각 행 타입은 아래 렌더링 루프에서 todayRow 기준으로 직접 판정
 
   // 병합 셀 맵 구성: 좌상단 셀엔 colspan/rowspan, 나머지 셀은 렌더링 스킵
   const mergeMap = {};
@@ -2111,7 +2119,14 @@ function wlRenderAttendanceTable(rows, todayDay, merges) {
   const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
   let html = '<table class="wl-att-table"><tbody>';
   rows.forEach((row, r) => {
-    const rowType = r < dataStartRow ? "wl-att-header" : "wl-att-data";
+    // 날짜행/요일행은 todayRow 기준으로 정확히 특정, 그 위는 전부 "제목행", 아래는 "데이터행"
+    let rowType;
+    if (todayRow === -1)      rowType = r === 0 ? "wl-att-title" : "wl-att-data";
+    else if (r < todayRow)    rowType = "wl-att-title";
+    else if (r === todayRow)  rowType = "wl-att-date";
+    else if (r === todayRow + 1) rowType = "wl-att-day";
+    else                       rowType = "wl-att-data";
+
     html += `<tr class="${rowType}">`;
     for (let c = 0; c < maxCols; c++) {
       const info = mergeMap[`${r},${c}`];
@@ -2132,7 +2147,7 @@ function wlRenderAttendanceTable(rows, todayDay, merges) {
 // 실제 렌더된 행 높이를 재서 누적 top을 넣어줌 (센터마다 헤더 줄 수가 달라도 안전하게 동작).
 function wlStickyHeaderOffsets(wrap) {
   requestAnimationFrame(() => {
-    const headerRows = wrap.querySelectorAll("tr.wl-att-header");
+    const headerRows = wrap.querySelectorAll("tr.wl-att-title, tr.wl-att-date, tr.wl-att-day");
     let top = 0;
     headerRows.forEach(tr => {
       tr.querySelectorAll("td").forEach(td => { td.style.top = `${top}px`; });
