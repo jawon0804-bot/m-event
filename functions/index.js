@@ -434,12 +434,21 @@ async function loadWorkLogTemplate(center) {
 }
 
 // 템플릿 시트를 대상 워크북에 새 시트(sheetName)로 복제
-// (열 너비/행 높이/병합 범위/셀 값·서식까지 그대로 복사 — ExcelJS는 워크북 간 시트 이동을
-//  직접 지원하지 않아 셀 단위로 복사함)
+// (열 너비/행 높이/병합 범위/셀 값·서식/인쇄 설정까지 그대로 복사 — ExcelJS는 워크북 간
+//  시트 이동을 직접 지원하지 않아 셀 단위로 복사함)
 function cloneTemplateSheet(targetWorkbook, tplSheet, sheetName) {
   const ws = targetWorkbook.addWorksheet(sheetName, { views: tplSheet.views });
 
   ws.columns = tplSheet.columns.map(col => ({ width: col?.width }));
+
+  // 인쇄영역/용지방향/배율/여백/맞쪽인쇄 등 페이지 설정 복제
+  // (row/column 구조를 그대로 복제하므로 printArea 좌표("A1:N54" 등)도 그대로 유효함)
+  if (tplSheet.pageSetup) {
+    ws.pageSetup = { ...tplSheet.pageSetup };
+  }
+  if (tplSheet.headerFooter) {
+    ws.headerFooter = { ...tplSheet.headerFooter };
+  }
 
   (tplSheet.model.merges || []).forEach(range => {
     try { ws.mergeCells(range); } catch (e) { console.warn(`[근무일지 내보내기] 병합 복제 실패(${range}):`, e.message); }
