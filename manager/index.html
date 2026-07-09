@@ -470,13 +470,38 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
   .wl-month-grid { grid-template-columns: repeat(6, 1fr); }
 }
 
-/* ── 출근부 원본 미리보기 표 ── */
+/* ── 출근부 원본 미리보기 표 ──
+   행 종류: wl-att-header(제목/센터명/컬럼헤더/날짜/요일) vs wl-att-data(실제 근무 기록) */
 .wl-att-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
 .wl-att-table td { border: 1px solid var(--gray2); padding: 3px 7px; text-align: center; }
-.wl-att-table tr:first-child td { background: var(--gray1); font-weight: 700; position: sticky; top: 0; z-index: 2; }
-.wl-att-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; text-align: left; font-weight: 600; }
-.wl-att-table tr:first-child td:first-child { z-index: 3; }
-.wl-att-today { background: #eff6ff !important; font-weight: 700; color: var(--navy); }
+
+/* 헤더 행: 배경/글자색을 데이터 행과 뚜렷이 구분 + 스크롤 시 상단 고정 */
+.wl-att-table tr.wl-att-header td {
+  background: var(--gray1);
+  color: var(--navy);
+  font-weight: 700;
+  border-color: #b9c2cc;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* 데이터 행: 흰 배경 + 진한 격자선 + 줄무늬(짝수 행) */
+.wl-att-table tr.wl-att-data td {
+  background: #fff;
+  color: #222;
+  border-color: #ccd3da;
+}
+.wl-att-table tr.wl-att-data:nth-child(even) td { background: #f7f9fb; }
+
+.wl-att-table td:first-child { position: sticky; left: 0; z-index: 1; text-align: left; font-weight: 600; }
+.wl-att-table tr.wl-att-header td:first-child { z-index: 3; background: var(--gray1); }
+.wl-att-table tr.wl-att-data td:first-child { background: #fff; }
+.wl-att-table tr.wl-att-data:nth-child(even) td:first-child { background: #f7f9fb; }
+
+/* 오늘 날짜 열 강조 — 헤더 구간과 데이터 구간에서 명확히 다른 톤으로 구분 */
+.wl-att-table tr.wl-att-header td.wl-att-today { background: #f7c9dc !important; color: var(--navy); }
+.wl-att-table tr.wl-att-data td.wl-att-today  { background: #ffd9e8 !important; color: #ad1457; font-weight: 700; border-left: 2px solid #ec4899; border-right: 2px solid #ec4899; }
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -1946,7 +1971,8 @@ async function wlLoadAttendancePreview() {
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
 
-    wrap.innerHTML = wlRenderAttendanceTable(rows, day);
+    wrap.innerHTML = wlRenderAttendanceTable(rows, day, ws["!merges"]);
+    wlStickyHeaderOffsets(wrap); // 헤더가 여러 줄이라 행마다 top 오프셋을 실측해서 스택되게 함
     statusEl.textContent = `"${sheetName}" 시트 · 원본 그대로 표시 (읽기 전용) · 오늘(${day}일) 열 강조`;
     wlAttendanceLoaded = cacheKey;
   } catch (e) {
@@ -2047,30 +2073,72 @@ async function wlUploadAttendanceTemplate() {
   }
 }
 
-// 시트를 2차원 배열(rows)로 받아 HTML 표로 렌더링. 오늘 날짜에 해당하는 열은 하이라이트.
-function wlRenderAttendanceTable(rows, todayDay) {
+// 시트를 2차원 배열(rows)로 받아 HTML 표로 렌더링.
+// - merges(ws['!merges'])를 살려서 colspan/rowspan으로 실제 병합 셀을 그대로 재현
+//   → 병합 헤더 셀(예: "주간·야간:사인(서명)")이 좁은 칸 하나를 억지로 넓히면서
+//     아래 날짜 칸들과 열 폭이 어긋나는 문제를 해결
+// - 날짜 숫자 행을 찾아 그 다음 행(요일 행)까지를 "헤더 구간", 그 이후를 "데이터 구간"으로 분류해
+//   서로 다른 배경/글자색/격자색을 적용하고, 오늘 날짜 열은 구간별로 다른 톤으로 강조
+function wlRenderAttendanceTable(rows, todayDay, merges) {
   if (!rows || rows.length === 0) {
     return `<div class="empty-state"><p>표시할 데이터가 없습니다.</p></div>`;
   }
-  // 헤더 부근에서 오늘 날짜 숫자와 일치하는 첫 셀의 열 위치를 찾아 그 열 전체를 강조
-  let todayCol = -1;
-  for (const row of rows) {
-    const idx = row.findIndex(v => String(v).trim() !== "" && Number(String(v).trim()) === todayDay);
-    if (idx > -1) { todayCol = idx; break; }
+
+  // 날짜 숫자 행(예: 1,2,3...31)과 그 안에서 오늘에 해당하는 열을 찾음
+  let todayRow = -1, todayCol = -1;
+  for (let r = 0; r < rows.length; r++) {
+    const idx = rows[r].findIndex(v => String(v).trim() !== "" && Number(String(v).trim()) === todayDay);
+    if (idx > -1) { todayRow = r; todayCol = idx; break; }
   }
+  // 날짜 행 다음 줄(요일 행)까지 헤더로 간주. 못 찾으면 안전하게 첫 행만 헤더 처리.
+  const dataStartRow = todayRow > -1 ? todayRow + 2 : 1;
+
+  // 병합 셀 맵 구성: 좌상단 셀엔 colspan/rowspan, 나머지 셀은 렌더링 스킵
+  const mergeMap = {};
+  (merges || []).forEach(m => {
+    const rspan = m.e.r - m.s.r + 1;
+    const cspan = m.e.c - m.s.c + 1;
+    if (rspan === 1 && cspan === 1) return;
+    mergeMap[`${m.s.r},${m.s.c}`] = { rowspan: rspan, colspan: cspan };
+    for (let r = m.s.r; r <= m.e.r; r++) {
+      for (let c = m.s.c; c <= m.e.c; c++) {
+        if (r === m.s.r && c === m.s.c) continue;
+        mergeMap[`${r},${c}`] = { skip: true };
+      }
+    }
+  });
+
   const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
   let html = '<table class="wl-att-table"><tbody>';
-  rows.forEach(row => {
-    html += "<tr>";
+  rows.forEach((row, r) => {
+    const rowType = r < dataStartRow ? "wl-att-header" : "wl-att-data";
+    html += `<tr class="${rowType}">`;
     for (let c = 0; c < maxCols; c++) {
+      const info = mergeMap[`${r},${c}`];
+      if (info && info.skip) continue; // 병합에 가려진 칸은 렌더링 스킵
+
       const v = row[c] !== undefined ? row[c] : "";
-      const cls = c === todayCol ? ' class="wl-att-today"' : "";
-      html += `<td${cls}>${esc(v)}</td>`;
+      const span = info ? ` colspan="${info.colspan || 1}" rowspan="${info.rowspan || 1}"` : "";
+      const todayCls = c === todayCol ? " wl-att-today" : "";
+      html += `<td class="${todayCls.trim()}"${span}>${esc(v)}</td>`;
     }
     html += "</tr>";
   });
   html += "</tbody></table>";
   return html;
+}
+
+// 헤더가 여러 줄이라 각 행마다 sticky top 오프셋이 달라야 스택되어 고정됨.
+// 실제 렌더된 행 높이를 재서 누적 top을 넣어줌 (센터마다 헤더 줄 수가 달라도 안전하게 동작).
+function wlStickyHeaderOffsets(wrap) {
+  requestAnimationFrame(() => {
+    const headerRows = wrap.querySelectorAll("tr.wl-att-header");
+    let top = 0;
+    headerRows.forEach(tr => {
+      tr.querySelectorAll("td").forEach(td => { td.style.top = `${top}px`; });
+      top += tr.getBoundingClientRect().height;
+    });
+  });
 }
 
 // ──────────────────────────────────────────────
