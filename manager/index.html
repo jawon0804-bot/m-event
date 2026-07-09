@@ -473,31 +473,10 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 /* ── 출근부 원본 미리보기 표 ── */
 .wl-att-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
 .wl-att-table td { border: 1px solid var(--gray2); padding: 3px 7px; text-align: center; }
-
-/* 헤드행 (계약TO/직책/성명 등 항목명) — 진한 남색 */
-.wl-att-row-head td { background: var(--navy); color: #fff; font-weight: 700; }
-
-/* 날짜행 (1~31 숫자) — 중간톤 블루 */
-.wl-att-row-date td { background: #dbeafe; font-weight: 700; color: var(--navy2); }
-
-/* 요일행 (수/목/금...) — 옅은 블루 */
-.wl-att-row-dow td { background: #eff6ff; font-weight: 600; color: var(--gray5); }
-
-/* 헤드/날짜/요일 3행 모두 스크롤 시 상단 고정 */
-.wl-att-row-head td, .wl-att-row-date td, .wl-att-row-dow td { position: sticky; z-index: 2; }
-.wl-att-row-head td { top: 0; }
-.wl-att-row-date td { top: 24px; }  /* 행 높이(폰트11px+패딩3px7px 기준 약 24px)에 맞춰 조정 */
-.wl-att-row-dow  td { top: 48px; }
-
-/* 데이터행 — 짝/홀 번갈아 배경으로 격자 구분 */
-.wl-att-row-even td { background: #ffffff; }
-.wl-att-row-odd  td { background: #f6f8fa; }
-
-/* 첫 번째 열(이름 등)은 가로 스크롤해도 계속 보이도록 고정 */
-.wl-att-table td:first-child { position: sticky; left: 0; z-index: 3; text-align: left; font-weight: 600; }
-.wl-att-row-head td:first-child { z-index: 4; }
-
-.wl-att-today { background: #fde2e7 !important; font-weight: 700; color: #be123c; }
+.wl-att-table tr:first-child td { background: var(--gray1); font-weight: 700; position: sticky; top: 0; z-index: 2; }
+.wl-att-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; text-align: left; font-weight: 600; }
+.wl-att-table tr:first-child td:first-child { z-index: 3; }
+.wl-att-today { background: #eff6ff !important; font-weight: 700; color: var(--navy); }
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -694,14 +673,46 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
       </div>
     </div>
 
-    <!-- 출근부 서브페이지 (원본 엑셀을 그대로 표시하는 읽기 전용 미리보기) -->
+    <!-- 출근부 서브페이지 (원본 엑셀을 그대로 표시하는 읽기 전용 미리보기 + 관리자/Master 업로드) -->
     <div class="wl-subpage" id="wl-subpage-attendance" style="display:none;padding:16px 24px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div id="wl-attendance-status" style="font-size:13px;color:var(--gray4)"></div>
-        <button class="search-btn" style="padding:5px 12px;font-size:12px" onclick="wlAttendanceLoaded=null;wlLoadAttendancePreview()">
-          <i class="fa-solid fa-arrows-rotate"></i> 새로고침
-        </button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="wl-attendance-upload-input" accept=".xlsx"
+                 style="display:none" onchange="wlValidateAttendanceFile(this.files[0])">
+          <button class="search-btn" id="wl-attendance-pick-btn"
+                  style="display:none;padding:5px 12px;font-size:12px"
+                  onclick="document.getElementById('wl-attendance-upload-input').click()">
+            <i class="fa-solid fa-upload"></i> 출근부 양식 교체
+          </button>
+          <button class="search-btn" style="padding:5px 12px;font-size:12px" onclick="wlAttendanceLoaded=null;wlLoadAttendancePreview()">
+            <i class="fa-solid fa-arrows-rotate"></i> 새로고침
+          </button>
+        </div>
       </div>
+
+      <!-- 선택한 파일 검증 결과 미리보기 (업로드 전 확인 단계) -->
+      <div id="wl-attendance-pending" style="display:none;margin-bottom:12px;padding:12px 14px;
+           border:1px solid var(--gray2);border-radius:8px;background:#f7fbf8;
+           align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="fa-solid fa-file-excel" style="color:#217346;font-size:1.8rem"></i>
+          <div>
+            <div id="wl-attendance-pending-name" style="font-weight:600;font-size:14px"></div>
+            <div id="wl-attendance-pending-info" style="font-size:12px;color:var(--gray4)"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="search-btn" style="padding:5px 12px;font-size:12px;background:#217346;color:#fff"
+                  onclick="wlUploadAttendanceTemplate()">
+            <i class="fa-solid fa-cloud-arrow-up"></i> 이 파일로 업로드
+          </button>
+          <button class="search-btn" style="padding:5px 12px;font-size:12px" onclick="wlCancelAttendanceUpload()">
+            취소
+          </button>
+        </div>
+      </div>
+
       <div id="wl-attendance-table-wrap" style="overflow:auto;max-height:75vh;border:1px solid var(--gray2);border-radius:8px"></div>
     </div>
   </div>
@@ -944,6 +955,7 @@ async function showApp() {
   // 보고서 탭 관리자/Master만 표시
   const isAdminOrMaster = currentUser.active === true || currentUser.center_name === "Master";
   document.getElementById("tab-report").style.display = isAdminOrMaster ? "flex" : "none";
+  document.getElementById("wl-attendance-pick-btn").style.display = isAdminOrMaster ? "inline-flex" : "none";
 
   await buildCenterFilters();
   loadFidLocations();
@@ -1944,32 +1956,112 @@ async function wlLoadAttendancePreview() {
   }
 }
 
+// ──────────────────────────────────────────────
+// 출근부 원본 업로드 (관리자/Master 전용) — 매월 work_seet.xlsx 교체
+// 파일 선택 → 로컬 검증(이름/확장자/시트명) → 미리보기 확인 → "업로드" 클릭 시 Storage 반영
+// ──────────────────────────────────────────────
+let wlPendingAttendanceFile = null; // 검증 통과 후 업로드 대기 중인 File 객체
+
+// 파일 선택 직후 — 이름/확장자/시트명만 로컬에서 검증. 통과 전까지 Storage에는 아무 것도 안 올라감.
+async function wlValidateAttendanceFile(file) {
+  const inputEl = document.getElementById("wl-attendance-upload-input");
+  if (!file) return;
+
+  // 1. 확장자 검증
+  if (!/\.xlsx$/i.test(file.name)) {
+    alert(`확장자가 올바르지 않습니다.\n선택한 파일: "${file.name}"\n반드시 .xlsx 파일이어야 합니다.`);
+    inputEl.value = "";
+    return;
+  }
+
+  // 2. 파일명(확장자 제외) 검증 — 정확히 "work_seet" 이어야 함
+  const baseName = file.name.replace(/\.xlsx$/i, "");
+  if (baseName !== "work_seet") {
+    alert(`파일 이름이 올바르지 않습니다.\n선택한 파일: "${file.name}"\n파일명이 정확히 "work_seet.xlsx" 이어야 합니다.\n(현재 이름: "${baseName}")`);
+    inputEl.value = "";
+    return;
+  }
+
+  // 3. 시트 이름 검증 — "양식" 또는 이번 달("N월") 시트가 하나라도 있어야 통과
+  let wb;
+  try {
+    const buf = await file.arrayBuffer();
+    wb = XLSX.read(buf, { type: "array" });
+  } catch (e) {
+    alert("엑셀 파일을 읽을 수 없습니다. 파일이 손상되었거나 xlsx 형식이 아닐 수 있습니다.");
+    inputEl.value = "";
+    return;
+  }
+
+  const kst = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", month: "2-digit" })
+    .formatToParts(new Date()).find(p => p.type === "month").value;
+  const month = parseInt(kst, 10);
+  const validSheetNames = ["양식", `${month}월`, `${String(month).padStart(2, "0")}월`];
+
+  const matchedSheet = wb.SheetNames.find(n => validSheetNames.includes(n.replace(/\s/g, "")));
+  if (!matchedSheet) {
+    alert(`시트 이름을 확인해주세요.\n"양식" 또는 "${month}월" 시트가 있어야 합니다.\n\n파일 안 시트 목록: ${wb.SheetNames.join(", ")}`);
+    inputEl.value = "";
+    return;
+  }
+
+  // 검증 통과 — 업로드 대기 상태로 전환, 엑셀 아이콘 + 파일명 미리보기 표시
+  wlPendingAttendanceFile = file;
+  document.getElementById("wl-attendance-pending-name").textContent = file.name;
+  document.getElementById("wl-attendance-pending-info").textContent =
+    `${(file.size / 1024).toFixed(0)} KB · "${matchedSheet}" 시트 확인됨`;
+  document.getElementById("wl-attendance-pending").style.display = "flex";
+}
+
+function wlCancelAttendanceUpload() {
+  wlPendingAttendanceFile = null;
+  document.getElementById("wl-attendance-pending").style.display = "none";
+  document.getElementById("wl-attendance-upload-input").value = "";
+}
+
+// "이 파일로 업로드" 버튼 — 실제 Storage 반영. 같은 경로 put()이라 기존 파일은 자동 덮어쓰기됨 (별도 delete 불필요).
+async function wlUploadAttendanceTemplate() {
+  const file = wlPendingAttendanceFile;
+  if (!file || !wlCenter) return;
+
+  if (!confirm(`"${wlCenter}" 센터의 출근부 양식을 교체합니다.\n기존 파일은 삭제되고 새 파일로 덮어씌워지며, 되돌릴 수 없습니다.\n계속하시겠습니까?`)) {
+    return;
+  }
+
+  const statusEl = document.getElementById("wl-attendance-status");
+  statusEl.textContent = "업로드 중...";
+
+  try {
+    const path = `templates/${wlCenter}/work_seet.xlsx`;
+    await storage.ref(path).put(file, {
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    alert("출근부 양식이 업로드되었습니다.");
+    wlCancelAttendanceUpload();
+    wlAttendanceLoaded = null;       // 미리보기 캐시 무효화
+    await wlLoadAttendancePreview(); // 새 파일로 미리보기 재조회
+  } catch (e) {
+    console.error("[출근부 업로드] 실패:", e);
+    alert("업로드 중 오류가 발생했습니다: " + (e.message || e.code || e));
+    statusEl.textContent = "";
+  }
+}
+
 // 시트를 2차원 배열(rows)로 받아 HTML 표로 렌더링. 오늘 날짜에 해당하는 열은 하이라이트.
 function wlRenderAttendanceTable(rows, todayDay) {
   if (!rows || rows.length === 0) {
     return `<div class="empty-state"><p>표시할 데이터가 없습니다.</p></div>`;
   }
-  // 날짜행 탐색: 오늘 날짜 숫자와 일치하는 셀이 있는 첫 행/열 위치
-  let todayCol = -1, dateRowIdx = -1;
-  for (let r = 0; r < rows.length; r++) {
-    const idx = rows[r].findIndex(v => String(v).trim() !== "" && Number(String(v).trim()) === todayDay);
-    if (idx > -1) { todayCol = idx; dateRowIdx = r; break; }
+  // 헤더 부근에서 오늘 날짜 숫자와 일치하는 첫 셀의 열 위치를 찾아 그 열 전체를 강조
+  let todayCol = -1;
+  for (const row of rows) {
+    const idx = row.findIndex(v => String(v).trim() !== "" && Number(String(v).trim()) === todayDay);
+    if (idx > -1) { todayCol = idx; break; }
   }
-  const headRowIdx = dateRowIdx > 0 ? dateRowIdx - 1 : -1;
-  const dowRowIdx  = dateRowIdx > -1 ? dateRowIdx + 1 : -1;
-  const dataStartIdx = dowRowIdx > -1 ? dowRowIdx + 1 : (dateRowIdx > -1 ? dateRowIdx + 1 : 0);
-
   const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
   let html = '<table class="wl-att-table"><tbody>';
-  rows.forEach((row, r) => {
-    let rowCls;
-    if (r === headRowIdx) rowCls = "wl-att-row-head";
-    else if (r === dateRowIdx) rowCls = "wl-att-row-date";
-    else if (r === dowRowIdx) rowCls = "wl-att-row-dow";
-    else if (r >= dataStartIdx) rowCls = (r - dataStartIdx) % 2 === 0 ? "wl-att-row-even" : "wl-att-row-odd";
-    else rowCls = "";
-
-    html += `<tr class="${rowCls}">`;
+  rows.forEach(row => {
+    html += "<tr>";
     for (let c = 0; c < maxCols; c++) {
       const v = row[c] !== undefined ? row[c] : "";
       const cls = c === todayCol ? ' class="wl-att-today"' : "";
