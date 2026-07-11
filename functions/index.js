@@ -746,8 +746,22 @@ exports.workLogDailyInit = onSchedule(
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MINUTES = 15;
 
+// ==============================================================================
+// [2026-07-11 추가] IP 단위 잠금 — 이름 단위 잠금만으로는, 공격자가 이름마다
+// LOGIN_MAX_ATTEMPTS-1번씩만 시도하고 다음 이름으로 넘어가면 어느 이름도 잠기지
+// 않은 채 사실상 무제한으로 전화번호를 대입할 수 있었음. 같은 IP에서 여러 이름을
+// 대상으로 실패가 누적되면 IP 자체를 잠가서 이 우회를 막는다.
+// 다만 회사/센터 공유 와이파이처럼 여러 정상 사용자가 같은 IP를 쓸 수 있으므로,
+// 이름 단위보다 훨씬 여유 있게(20회) 잡아서 정상적인 오타 몇 번으로는 안 걸리게 함.
+// (완전한 전역 잠금은 공격자가 일부러 트리거해서 전체 서비스 로그인을 막아버리는
+//  DoS로 악용될 수 있어 넣지 않음 — IP 단위가 그 우회 경로를 막으면서도 그 위험은 없음)
+// ==============================================================================
+const IP_MAX_ATTEMPTS = 20;
+const IP_LOCKOUT_MINUTES = 15;
+
 // 로그인 시도 결과를 잠금 문서에 원자적으로 반영 (동시 요청 레이스 방지)
-async function registerLoginResult(lockRef, success) {
+// maxAttempts/lockoutMinutes를 받아서 이름 단위/IP 단위 양쪽에 재사용
+async function registerLoginResult(lockRef, success, maxAttempts = LOGIN_MAX_ATTEMPTS, lockoutMinutes = LOGIN_LOCKOUT_MINUTES) {
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(lockRef);
     const data = snap.exists ? snap.data() : {};
@@ -759,18 +773,23 @@ async function registerLoginResult(lockRef, success) {
     }
 
     const nextCount  = (data.failCount || 0) + 1;
-    const justLocked = nextCount >= LOGIN_MAX_ATTEMPTS;
+    const justLocked = nextCount >= maxAttempts;
 
     tx.set(lockRef, {
-      failCount: justLocked ? 0 : nextCount, // 잠금 걸리면 카운트 리셋 (해제 후 다시 5회부터)
+      failCount: justLocked ? 0 : nextCount, // 잠금 걸리면 카운트 리셋 (해제 후 다시 처음부터)
       lockedUntil: justLocked
-        ? admin.firestore.Timestamp.fromMillis(now + LOGIN_LOCKOUT_MINUTES * 60 * 1000)
+        ? admin.firestore.Timestamp.fromMillis(now + lockoutMinutes * 60 * 1000)
         : null,
       updated_at: admin.firestore.Timestamp.now(),
     }, { merge: true });
 
-    return { justLocked, attemptsLeft: justLocked ? 0 : LOGIN_MAX_ATTEMPTS - nextCount };
+    return { justLocked, attemptsLeft: justLocked ? 0 : maxAttempts - nextCount };
   });
+}
+
+// IP를 Firestore 문서 ID로 쓸 수 있게 정리 (슬래시가 경로 구분자와 충돌하므로 치환)
+function sanitizeIpForDocId(ip) {
+  return String(ip || "").trim().replace(/\//g, "_");
 }
 
 // 로그인 시도 기록 (성공/실패/차단 관계없이 항상 남김) — 기록 실패가 로그인 자체를 막으면 안 되므로 별도 try/catch
@@ -823,7 +842,7 @@ exports.loginWithCredentials = onCall(async (request) => {
   }
 
   // 1) 잠금 여부 먼저 확인 — UserDB 조회 전에 차단해서 무차별 대입 비용을 낮춤
-  //    (잠금은 이름 기준 공유 — 어느 앱으로 시도하든 같은 사람을 노린 시도이므로 합산)
+  //    (이름 단위 잠금은 어느 앱으로 시도하든 같은 사람을 노린 시도이므로 합산)
   const lockRef = db.collection("login_lockouts").doc(cleanName);
   const preCheck = await lockRef.get();
   if (preCheck.exists) {
@@ -832,6 +851,22 @@ exports.loginWithCredentials = onCall(async (request) => {
       await logLoginAttempt({ name: cleanName, phone: cleanPhone, ip, userAgent, success: false, blocked: true, matchedCenter: null, app: appId });
       const remainMin = Math.ceil((d.lockedUntil.toMillis() - Date.now()) / 60000);
       throw new HttpsError("resource-exhausted", `로그인 시도가 너무 많습니다. ${remainMin}분 후 다시 시도하세요.`);
+    }
+  }
+
+  // 1-2) [2026-07-11 추가] IP 단위 잠금도 확인 — 이름을 바꿔가며 시도해서 이름 단위
+  //      잠금을 우회하는 공격을 막기 위함 (위 IP_MAX_ATTEMPTS 주석 참고)
+  const ipDocId = sanitizeIpForDocId(ip);
+  const ipLockRef = ipDocId ? db.collection("login_lockouts_ip").doc(ipDocId) : null;
+  if (ipLockRef) {
+    const ipPreCheck = await ipLockRef.get();
+    if (ipPreCheck.exists) {
+      const d = ipPreCheck.data();
+      if (d.lockedUntil && d.lockedUntil.toMillis() > Date.now()) {
+        await logLoginAttempt({ name: cleanName, phone: cleanPhone, ip, userAgent, success: false, blocked: true, matchedCenter: null, app: appId });
+        const remainMin = Math.ceil((d.lockedUntil.toMillis() - Date.now()) / 60000);
+        throw new HttpsError("resource-exhausted", `이 네트워크에서 로그인 시도가 너무 많습니다. ${remainMin}분 후 다시 시도하세요.`);
+      }
     }
   }
 
@@ -861,8 +896,11 @@ exports.loginWithCredentials = onCall(async (request) => {
     console.warn(`[로그인] ${cleanName} 계정에 password_hash가 있으나 검증 로직 미구현 — bcryptjs 추가 필요`);
   }
 
-  // 3) 시도 카운트 갱신 (성공이면 리셋, 실패면 증가)
+  // 3) 시도 카운트 갱신 (성공이면 리셋, 실패면 증가) — 이름 단위 + IP 단위 둘 다 반영
   const lockResult = await registerLoginResult(lockRef, !!matched);
+  if (ipLockRef) {
+    await registerLoginResult(ipLockRef, !!matched, IP_MAX_ATTEMPTS, IP_LOCKOUT_MINUTES);
+  }
 
   // 4) 성공/실패 무관하게 항상 기록
   await logLoginAttempt({

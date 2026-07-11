@@ -2,44 +2,105 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ============================================================
+    // [2026-07-11 재작성] 이전 규칙은 대부분 "if true"라 로그인 여부와
+    // 무관하게 아무나 읽고/쓸 수 있었음. loginWithCredentials가 이미
+    // center_name/active 커스텀 클레임을 Firebase Auth 토큰에 심어주고
+    // 있으므로, 여기서 request.auth.token.center_name으로 실제 접근
+    // 제어를 건다. M-SMART/m-event 프론트엔드는 이미 로그인 후 커스텀
+    // 토큰으로 signInWithCustomToken을 호출하고 있어서 앱 코드 변경 불필요.
+    // Admin SDK(Cloud Functions, Dashboard의 server.js, M-Engine)는 이
+    // 규칙 자체를 우회하므로 서버 쪽 동작에는 영향 없음.
+    // ============================================================
+
+    // inspection_logs: M-SMART가 브라우저에서 직접 씀, m-event가 읽음.
+    // 로그인 필수 + 자기 센터 데이터만 쓰기/읽기 (Master는 전체 열람).
+    // 수정/삭제는 클라이언트에서 불가 — 필요하면 Admin SDK/Functions만.
     match /inspection_logs/{doc} {
-      allow read, write: if true;
+      allow create: if request.auth != null
+        && request.resource.data.center_name == request.auth.token.center_name;
+      allow read: if request.auth != null
+        && (resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+      allow update, delete: if false;
     }
 
+    // events: 생성은 onInspectionLog 트리거(Admin SDK)만 함.
+    // 상태 변경(조치중/완료)은 m-event 화면이 클라이언트에서 직접 update.
     match /events/{doc} {
-      allow read, write: if true;
+      allow read: if request.auth != null
+        && (resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+      allow update: if request.auth != null
+        && (resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+      allow create, delete: if false;
     }
 
+    // UserDB: 이름/전화번호/이메일 PII. loginWithCredentials가 Admin SDK로만
+    // 조회하므로(functions/index.js:841) 클라이언트가 직접 읽을 이유가
+    // 없음 — 완전 차단.
     match /UserDB/{doc} {
-      allow read: if true;
+      allow read, write: if false;
+    }
+
+    // center_configs/{center}/...: M-SMART가 자기 센터 점검표(checklists)를 읽음.
+    match /center_configs/{center}/{document=**} {
+      allow read: if request.auth != null
+        && (request.auth.token.center_name == center
+            || request.auth.token.center_name == "Master");
       allow write: if false;
     }
 
-    match /center_configs/{doc=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-
+    // Maxerve_Excel: m-event 엑셀 탭이 클라이언트에서 직접 읽음.
     match /Maxerve_Excel/{doc} {
-      allow read: if true;
+      allow read: if request.auth != null
+        && (resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
       allow write: if false;
     }
 
+    // schedule_logs: M-Engine 내부 트러블슈팅용, 클라이언트 접근 불필요.
     match /schedule_logs/{doc} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if false;
     }
 
+    // settings/all_centers: Master 센터 드롭다운 등에 쓰임. 로그인만 하면 열람 가능.
     match /settings/{doc=**} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
 
-    match /work_logs/{doc} {
-      allow read, write: if true;
+    // work_logs: 근무일지, 자기 센터만 읽기/쓰기 가능.
+    match /work_logs/{docId} {
+      allow read: if request.auth != null
+        && (resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+      allow create: if request.auth != null
+        && (request.resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+      allow update: if request.auth != null
+        && (resource.data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+      allow delete: if false;
     }
-    match /work_logs/{doc}/{sub=**} {
-      allow read, write: if true;
+    match /work_logs/{docId}/{sub=**} {
+      allow read, write: if request.auth != null
+        && (get(/databases/$(database)/documents/work_logs/$(docId)).data.center_name == request.auth.token.center_name
+            || request.auth.token.center_name == "Master");
+    }
+
+    // login_attempts / login_lockouts: 전화번호·IP 등 PII 포함, Admin SDK
+    // (Cloud Functions)만 접근. 명시적으로 차단해서 의도를 분명히 함
+    // (이전엔 규칙 자체가 없어 default-deny로 우연히 막혀있었을 뿐이었음).
+    match /login_attempts/{doc} {
+      allow read, write: if false;
+    }
+    match /login_lockouts/{doc} {
+      allow read, write: if false;
+    }
+    match /login_lockouts_ip/{doc} {
+      allow read, write: if false;
     }
 
     match /_monitor/{document=**} {
