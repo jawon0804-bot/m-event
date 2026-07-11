@@ -92,7 +92,7 @@ async function sendMail(to, subject, html) {
   }
 }
 
-function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, datetime, memo, actionUrl }) {
+function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, workerLabel = "점검자", datetime, memo, actionUrl }) {
   return `
   <div style="font-family:Apple SD Gothic Neo,맑은 고딕,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a5f;padding:20px 24px">
@@ -103,7 +103,7 @@ function makeEmailHtml({ title, center_name, facility_id, fid_name, worker, date
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         <tr><td style="padding:8px 0;color:#6b7280;width:80px">센터</td><td style="padding:8px 0;color:#111;font-weight:600">${escHtml(center_name)}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280">설비</td><td style="padding:8px 0;color:#111">${escHtml(fid_name || facility_id)}</td></tr>
-        <tr><td style="padding:8px 0;color:#6b7280">점검자</td><td style="padding:8px 0;color:#111">${escHtml(worker)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280">${escHtml(workerLabel)}</td><td style="padding:8px 0;color:#111">${escHtml(worker)}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280">일시</td><td style="padding:8px 0;color:#111">${escHtml(datetime)}</td></tr>
         <tr><td style="padding:8px 0;color:#6b7280;vertical-align:top">내용</td>
             <td style="padding:8px 0;color:#dc2626;font-weight:600">${nl2br(memo)}</td></tr>
@@ -216,10 +216,10 @@ exports.onIssueUpdate = onDocumentUpdated(
 
     if (after.status === "조치중") {
       await sendMail(adminEmails, `[조치 진행] ${center_name} - ${facility_id} - ${memo}`,
-        makeEmailHtml({ title: "🟡 이벤트 조치가 시작되었습니다", center_name, facility_id, worker: lastHistory.by || "", datetime, memo: lastHistory.content || "", actionUrl: eventUrl }));
+        makeEmailHtml({ title: "🟡 이벤트 조치가 시작되었습니다", center_name, facility_id, worker: lastHistory.by || "", workerLabel: "작성자", datetime, memo: lastHistory.content || "", actionUrl: eventUrl }));
     } else if (after.status === "완료") {
       await sendMail(adminEmails, `[이벤트 완료] ${center_name} - ${facility_id} - ${memo}`,
-        makeEmailHtml({ title: "🟢 이벤트가 완료 처리되었습니다", center_name, facility_id, worker: lastHistory.by || "", datetime, memo: lastHistory.content || "", actionUrl: eventUrl }));
+        makeEmailHtml({ title: "🟢 이벤트가 완료 처리되었습니다", center_name, facility_id, worker: lastHistory.by || "", workerLabel: "작성자", datetime, memo: lastHistory.content || "", actionUrl: eventUrl }));
     }
     return null;
   }
