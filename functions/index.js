@@ -792,6 +792,10 @@ function sanitizeIpForDocId(ip) {
   return String(ip || "").trim().replace(/\//g, "_");
 }
 
+// 로그인 시도 기록 보관 기간 (일). 실패한 시도에는 남의 전화번호 추측값이
+// 그대로 남기 때문에 무기한 보관하지 않고 Firestore TTL로 자동 삭제한다.
+const LOGIN_ATTEMPT_RETENTION_DAYS = 90;
+
 // 로그인 시도 기록 (성공/실패/차단 관계없이 항상 남김) — 기록 실패가 로그인 자체를 막으면 안 되므로 별도 try/catch
 async function logLoginAttempt({ name, phone, ip, userAgent, success, blocked, matchedCenter, app }) {
   try {
@@ -803,6 +807,10 @@ async function logLoginAttempt({ name, phone, ip, userAgent, success, blocked, m
       success, blocked,
       ip, user_agent: userAgent,
       at: admin.firestore.FieldValue.serverTimestamp(),
+      // [2026-07-11 추가] Firestore TTL 정책 대상 필드 — expireAt이 지나면
+      // Firestore가 자동으로 문서를 삭제한다 (별도 삭제 배치 불필요).
+      // 정책 자체는 `gcloud firestore fields ttls update`로 등록해야 동작함.
+      expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + LOGIN_ATTEMPT_RETENTION_DAYS * 24 * 60 * 60 * 1000),
     });
   } catch (e) {
     console.error("[로그인] 시도 기록 실패:", e);
