@@ -578,7 +578,10 @@ function wlRenderAttendanceTable(rows, todayDay, merges) {
 
       const v = row[c] !== undefined ? row[c] : "";
       const span = info ? ` colspan="${info.colspan || 1}" rowspan="${info.rowspan || 1}"` : "";
-      const todayCls = c === todayCol ? " wl-att-today" : "";
+      // 여러 날짜 칸을 하나로 합친 병합 헤더(예: "휴무:휴")는 오늘 강조를 칠하면
+      // 병합 범위 전체가 통째로 물들어 색이 번진 것처럼 보이므로, 병합 안 된 칸에만 강조 적용
+      const isMergedWide = info && ((info.colspan || 1) > 1 || (info.rowspan || 1) > 1);
+      const todayCls = c === todayCol && !isMergedWide ? " wl-att-today" : "";
       html += `<td class="${todayCls.trim()}"${span}>${esc(v)}</td>`;
     }
     html += "</tr>";
