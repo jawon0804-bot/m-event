@@ -117,7 +117,7 @@ async function showApp() {
   // 보고서 탭 관리자/Master만 표시
   const isAdminOrMaster = currentUser.active === true || currentUser.center_name === "Master";
   document.getElementById("tab-report").style.display = isAdminOrMaster ? "flex" : "none";
-  document.getElementById("wl-attendance-pick-btn").style.display = isAdminOrMaster ? "inline-flex" : "none";
+  document.getElementById("wl-attendance-pick-btn").style.display = isAdminOrMaster ? "inline-block" : "none";
 
   await buildCenterFilters();
   loadFidLocations();
