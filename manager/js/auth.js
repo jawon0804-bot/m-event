@@ -118,6 +118,7 @@ async function showApp() {
   const isAdminOrMaster = currentUser.active === true || currentUser.center_name === "Master";
   document.getElementById("tab-report").style.display = isAdminOrMaster ? "flex" : "none";
   document.getElementById("wl-attendance-pick-btn").style.display = isAdminOrMaster ? "inline-block" : "none";
+  document.getElementById("wl-attendance-hint").style.display = isAdminOrMaster ? "flex" : "none";
 
   await buildCenterFilters();
   loadFidLocations();

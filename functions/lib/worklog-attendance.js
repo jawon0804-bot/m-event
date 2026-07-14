@@ -11,10 +11,10 @@ const {
 } = require("../config/constants");
 const { getKstDateParts } = require("./dateUtils");
 
-// Storage에서 센터별 출근부 템플릿(templates/{center}/work_seet.xlsx)을 불러와
+// Storage에서 센터별 출근부 템플릿(templates/{center}/work_sheet.xlsx)을 불러와
 // 대상 월의 시트를 반환. 없으면 null.
 async function loadAttendanceSheet(center, month) {
-  const templatePath = `templates/${center}/work_seet.xlsx`;
+  const templatePath = `templates/${center}/work_sheet.xlsx`;
   const templateFile = bucket.file(templatePath);
   const [exists] = await templateFile.exists();
   if (!exists) {

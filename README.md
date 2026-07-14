@@ -242,7 +242,7 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 | `work_logs/{center}_{workday}` | 하루치 근무일지 기본 정보 (문서 1개, 필드 단위로 blur 시 자동저장) |
 | `work_logs/{...}/dayWork`, `dayCheck`, `nightWork`, `nightNote`, `legal`, `material` | 여러 명이 동시에 입력해도 안전하게 각자 `add()`로 쌓이는 하위 컬렉션 (줄 단위 항목들) |
 | Storage: `templates/{center}/work_log.xlsx` | 센터별 원본 엑셀 양식 (시트 "양식") — 이 템플릿을 복제해서 날짜별 시트로 값을 채움 |
-| Storage: `templates/{center}/work_seet.xlsx` | 출근부 원본 양식 — 출석 코드(주/야/비/휴/교/병/연+휴가/대휴+오) 자동 매핑용 |
+| Storage: `templates/{center}/work_sheet.xlsx` | 출근부 원본 양식 — 출석 코드(주/야/비/휴/교/병/연+휴가/대휴+오) 자동 매핑용 |
 | Storage: `work_log/{center}/{연월}_점검표.xlsx` | 최종 생성되는 월별 근무일지 엑셀 결과물 |
 
 ### 관련 Functions
@@ -250,7 +250,7 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 | 함수 이름 | 언제 실행되나요? | 무엇을 하나요? |
 |---|---|---|
 | `workLogDailyExport` | 매일 09:00 (Asia/Seoul) | 방금 끝난 근무일(어제 09:00~오늘 09:00)의 `work_logs` 데이터를 센터별 원본 템플릿에 채워서 월별 엑셀에 날짜 시트로 반영 |
-| `workLogDailyInit` | 매일 09:00 (Asia/Seoul) | Storage의 출근부 원본(`work_seet.xlsx`)을 읽어 컬럼 위치를 동적으로 감지하고, 출석 코드를 그날 `work_logs` 문서에 자동으로 채워 넣음 (단, **문서가 이미 있으면 손대지 않음** — 수기로 입력 중인 내용을 자동화가 덮어쓰지 않도록 하기 위함) |
+| `workLogDailyInit` | 매일 09:00 (Asia/Seoul) | Storage의 출근부 원본(`work_sheet.xlsx`)을 읽어 컬럼 위치를 동적으로 감지하고, 출석 코드를 그날 `work_logs` 문서에 자동으로 채워 넣음 (단, **문서가 이미 있으면 손대지 않음** — 수기로 입력 중인 내용을 자동화가 덮어쓰지 않도록 하기 위함) |
 
 > 🧸 비유: 매일 아침 9시가 되면 "어제 하루치 출퇴근부는 자동으로 채워주고, 근무일지는 정해진 양식지에 옮겨 적어서 파일로 정리해주는" 사무보조가 돌아가는 셈이에요. 다만 이미 누가 손으로 써놓은 부분은 건드리지 않아요.
 

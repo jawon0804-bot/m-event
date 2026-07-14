@@ -388,7 +388,7 @@ async function wlSaveBaseInfo() {
 }
 
 // ──────────────────────────────────────────────
-// 출근부 원본 미리보기 (templates/{center}/work_seet.xlsx 를 그대로 표시, 읽기 전용)
+// 출근부 원본 미리보기 (templates/{center}/work_sheet.xlsx 를 그대로 표시, 읽기 전용)
 // SheetJS(XLSX)로 클라이언트에서 직접 파싱 — 서버 왕복 없이 바로 렌더링
 // ──────────────────────────────────────────────
 let wlAttendanceLoaded = null; // 캐시 키: `${center}_${year}-${month}` — 같은 달이면 재조회 안 함
@@ -410,7 +410,7 @@ async function wlLoadAttendancePreview() {
   wrap.innerHTML = "";
 
   try {
-    const path = `templates/${wlCenter}/work_seet.xlsx`;
+    const path = `templates/${wlCenter}/work_sheet.xlsx`;
     const url  = await storage.ref(path).getDownloadURL();
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`파일 다운로드 실패: ${resp.status}`);
@@ -431,12 +431,12 @@ async function wlLoadAttendancePreview() {
   } catch (e) {
     console.warn("[출근부 미리보기] 로드 실패:", e.code || e.message || e);
     statusEl.textContent = "";
-    wrap.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>출근부 파일이 없습니다.<br><span style="font-size:12px">(templates/${esc(wlCenter)}/work_seet.xlsx 확인 필요)</span></p></div>`;
+    wrap.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>출근부 파일이 없습니다.<br><span style="font-size:12px">(templates/${esc(wlCenter)}/work_sheet.xlsx 확인 필요)</span></p></div>`;
   }
 }
 
 // ──────────────────────────────────────────────
-// 출근부 원본 업로드 (관리자/Master 전용) — 매월 work_seet.xlsx 교체
+// 출근부 원본 업로드 (관리자/Master 전용) — 매월 work_sheet.xlsx 교체
 // 파일 선택 → 로컬 검증(이름/확장자/시트명) → 미리보기 확인 → "업로드" 클릭 시 Storage 반영
 // ──────────────────────────────────────────────
 let wlPendingAttendanceFile = null; // 검증 통과 후 업로드 대기 중인 File 객체
@@ -453,10 +453,10 @@ async function wlValidateAttendanceFile(file) {
     return;
   }
 
-  // 2. 파일명(확장자 제외) 검증 — 정확히 "work_seet" 이어야 함
+  // 2. 파일명(확장자 제외) 검증 — 정확히 "work_sheet" 이어야 함
   const baseName = file.name.replace(/\.xlsx$/i, "");
-  if (baseName !== "work_seet") {
-    alert(`파일 이름이 올바르지 않습니다.\n선택한 파일: "${file.name}"\n파일명이 정확히 "work_seet.xlsx" 이어야 합니다.\n(현재 이름: "${baseName}")`);
+  if (baseName !== "work_sheet") {
+    alert(`파일 이름이 올바르지 않습니다.\n선택한 파일: "${file.name}"\n파일명이 정확히 "work_sheet.xlsx" 이어야 합니다.\n(현재 이름: "${baseName}")`);
     inputEl.value = "";
     return;
   }
@@ -511,7 +511,7 @@ async function wlUploadAttendanceTemplate() {
   statusEl.textContent = "업로드 중...";
 
   try {
-    const path = `templates/${wlCenter}/work_seet.xlsx`;
+    const path = `templates/${wlCenter}/work_sheet.xlsx`;
     await storage.ref(path).put(file, {
       contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
