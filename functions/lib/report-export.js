@@ -191,7 +191,10 @@ async function buildReportWorkbook({ center, start, end, events }) {
     ws.getCell(row, 10).value = buildProgressText(ev.history);            // J 진행현황
 
     const statusCell = ws.getCell(row, 11);                               // K 상태
-    statusCell.value = ev.status || "";
+    const lastHistory = Array.isArray(ev.history) && ev.history.length > 0
+      ? ev.history[ev.history.length - 1] : null;                        // 현재 상태로 바뀐 시점
+    const statusAt = lastHistory ? fmtTimestampKst(lastHistory.at) : "";
+    statusCell.value = statusAt ? `${ev.status || ""}\n${statusAt}` : (ev.status || "");
     statusCell.font = {
       name: "맑은 고딕", size: 12,
       color: { argb: REPORT_STATUS_COLOR[ev.status] || "FF000000" },
@@ -210,13 +213,22 @@ async function buildReportWorkbook({ center, start, end, events }) {
 
   // 106행(초과 안내, splice로 이미 당겨져 올라와 있음) — 초과 없으면 그냥 삭제
   const overflowRow = lastFilledRow + 1;
+  let finalLastRow;
   if (total > REPORT_MAX_ROWS) {
     ws.getCell(overflowRow, 1).value =
       `⚠️ 조회 기간 내 이벤트가 ${total}건으로 100건을 초과하여 최신 100건만 표시되었습니다. ` +
       `(초과 ${total - REPORT_MAX_ROWS}건 · 기간을 좁혀 다시 조회해주세요)`;
+    finalLastRow = overflowRow;
   } else {
     ws.spliceRows(overflowRow, 1);
+    finalLastRow = lastFilledRow;
   }
+
+  // [2026-07-23 버그 수정] spliceRows()는 셀 값은 옮겨주지만 인쇄범위(printArea)는
+  // 갱신 안 해줘서 템플릿 원본값("A1:K106")에 그대로 고정돼 있었음 — 실제 데이터가
+  // 몇 행에서 끝나든 인쇄범위가 항상 106행까지로 잡혀서 양식과 다르게 인쇄되는 원인이었음.
+  // 매핑 후 실제 마지막 행 기준으로 매번 다시 계산해서 맞춰준다.
+  ws.pageSetup.printArea = `A1:K${finalLastRow}`;
 
   return wb;
 }
