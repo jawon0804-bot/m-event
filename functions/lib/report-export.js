@@ -200,6 +200,14 @@ async function buildReportWorkbook({ center, start, end, events }) {
   ws.pageSetup.fitToPage = true;
   ws.pageSetup.fitToWidth = 1;
   ws.pageSetup.fitToHeight = 0;
+  // [2026-07-23 버그 수정] "내용에 문제가 있습니다" 손상 경고의 원인 2가지를 같이 정리:
+  //  1. fitToPage를 켰는데도 템플릿의 옛 고정배율(scale=43)이 그대로 남아 fitToWidth/
+  //     fitToHeight와 함께 쓰여서 충돌 — fitToPage 켤 땐 scale을 지워야 함
+  //  2. 템플릿 원본의 horizontalDpi/verticalDpi 값이 4294967295(비정상)로 저장돼 있던
+  //     걸 ExcelJS가 그대로 다시 씀 — 정상적인 값으로 바로잡음
+  ws.pageSetup.scale = undefined;
+  ws.pageSetup.horizontalDpi = 600;
+  ws.pageSetup.verticalDpi = 600;
 
   ws.getCell("A1").value = buildTitle(start, end, center);
 
