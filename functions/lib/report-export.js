@@ -260,7 +260,11 @@ async function buildReportWorkbook({ center, start, end, events }) {
 
   // 매핑 후 실제 마지막 행 기준으로 인쇄범위를 매번 다시 계산해서 맞춘다
   // (템플릿 원본값 "A1:K106"에 고정돼 있으면 실제 데이터와 어긋남).
-  ws.pageSetup.printArea = `A1:K${finalLastRow}`;
+  // [2026-07-23 버그 수정] ExcelJS가 printArea 문자열을 쓸 때 열(A/K)엔 "$"를 자동으로
+  // 붙이면서 행 번호엔 안 붙여서 "$A1:$K7"처럼 불완전한 절대참조가 되고, 이게 엑셀에서
+  // "내용에 문제가 있습니다(복구)" 경고를 띄우던 원인이었음. 행 번호 쪽에 "$"를 직접
+  // 넣어주면 결과적으로 정상적인 "$A$1:$K$7" 형태로 나옴(직접 검증함).
+  ws.pageSetup.printArea = `A$1:K$${finalLastRow}`;
 
   return wb;
 }
