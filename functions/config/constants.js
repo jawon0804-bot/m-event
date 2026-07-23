@@ -79,6 +79,11 @@ module.exports = {
   REPORT_DATA_START_ROW: 6,   // 첫 데이터 행
   REPORT_MAX_ROWS: 100,       // 6~105행 = 최대 100건
   REPORT_PHOTO_SIZE_PX: 227,  // 6cm @ 96dpi (2026-07-23: 4.5cm→6cm 확대, F/G/H열 너비·행높이도 템플릿에서 같은 비율로 같이 키움)
+  REPORT_ROW_MIN_HEIGHT_PT: 170.8, // 사진(6cm) 기준 최소 행높이 — 템플릿 6~106행 기본 높이와 동일
+  // [2026-07-23] 상황발생 내용(I)/진행현황(J) 글자가 길면 행이 잘려 보이던 문제 —
+  // 두 열의 실제 폭(포인트)을 여기 둬서 report-export.js가 줄바꿈 줄 수를 추정,
+  // 최소 높이보다 더 필요하면 행 높이를 늘림. 템플릿에서 I/J열 너비를 바꾸면 같이 맞춰야 함.
+  REPORT_TEXT_COL_WIDTH: { I: 50.625, J: 70.625 },
   REPORT_STATUS_COLOR: {
     "발생":   "FFFF0000", // 빨강
     "조치중": "FF2E75B6", // 파랑

@@ -20,6 +20,7 @@ const { getKstDateParts } = require("./dateUtils");
 const {
   REPORT_TEMPLATE_PATH, REPORT_TEMPLATE_SHEET, REPORT_DATA_START_ROW,
   REPORT_MAX_ROWS, REPORT_PHOTO_SIZE_PX, REPORT_STATUS_COLOR,
+  REPORT_ROW_MIN_HEIGHT_PT, REPORT_TEXT_COL_WIDTH,
 } = require("../config/constants");
 
 // ==============================================================================
@@ -81,6 +82,23 @@ function buildProgressText(history) {
 function formatDatetimeCell(datetime) {
   const [d, t] = String(datetime || "").split(" ");
   return t ? `${d}\n  ${t}` : (d || "");
+}
+
+// [2026-07-23] I(상황발생 내용)/J(진행현황) 글자가 길면 셀보다 내용이 넘쳐 보이던 문제 —
+// 실제 텍스트 레이아웃 엔진은 없으니 "열 너비 단위 ≈ 글자 수"로 대략 줄 수를 추정해서
+// 필요한 줄 수만큼 행 높이를 늘린다. 평소(사진 들어가는 짧은 내용)엔 최소 높이 그대로.
+const REPORT_LINE_HEIGHT_PT = 16; // 12pt 폰트 기준 대략적인 줄 간격
+function estimateTextLines(text, colWidthUnits) {
+  if (!text) return 0;
+  const charsPerLine = Math.max(1, Math.floor(colWidthUnits));
+  return String(text).split("\n")
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+}
+function computeRowHeight(memo, progressText) {
+  const iLines = estimateTextLines(memo, REPORT_TEXT_COL_WIDTH.I);
+  const jLines = estimateTextLines(progressText, REPORT_TEXT_COL_WIDTH.J);
+  const neededHeight = Math.max(iLines, jLines) * REPORT_LINE_HEIGHT_PT + 10; // 여백
+  return Math.max(REPORT_ROW_MIN_HEIGHT_PT, neededHeight);
 }
 
 function guessImageExtension(url) {
@@ -175,6 +193,14 @@ async function queryEvents({ center, status, start, end }) {
 async function buildReportWorkbook({ center, start, end, events }) {
   const { wb, ws } = await loadReportWorkbook();
 
+  // [2026-07-23 버그 수정] 템플릿이 고정 배율(scale=43%)을 쓰고 있어서, 사진을 6cm로
+  // 키우며 F~H열이 넓어지자 K열(상태)이 두 번째 페이지로 밀려 잘리는 문제가 있었음.
+  // 고정 배율 대신 "가로 1페이지에 맞춤"으로 바꿔서 열 너비가 또 바뀌어도 항상 한 페이지
+  // 폭 안에 들어가게 함 (세로는 필요한 만큼 여러 페이지 허용).
+  ws.pageSetup.fitToPage = true;
+  ws.pageSetup.fitToWidth = 1;
+  ws.pageSetup.fitToHeight = 0;
+
   ws.getCell("A1").value = buildTitle(start, end, center);
 
   const total = events.length;
@@ -183,12 +209,13 @@ async function buildReportWorkbook({ center, start, end, events }) {
   for (let i = 0; i < mapped.length; i++) {
     const ev = mapped[i];
     const row = REPORT_DATA_START_ROW + i;
+    const progressText = buildProgressText(ev.history);
     ws.getCell(row, 2).value = ev.center_name || "";                       // B 센터명
     ws.getCell(row, 3).value = formatDatetimeCell(ev.datetime);            // C 발생일시
     ws.getCell(row, 4).value = ev.fid_name || ev.facility_id || "";        // D 설비/위치
     ws.getCell(row, 5).value = ev.worker || "";                           // E 점검자
     ws.getCell(row, 9).value = ev.memo || "";                             // I 상황발생 내용
-    ws.getCell(row, 10).value = buildProgressText(ev.history);            // J 진행현황
+    ws.getCell(row, 10).value = progressText;                             // J 진행현황
 
     const statusCell = ws.getCell(row, 11);                               // K 상태
     const lastHistory = Array.isArray(ev.history) && ev.history.length > 0
@@ -200,34 +227,39 @@ async function buildReportWorkbook({ center, start, end, events }) {
       color: { argb: REPORT_STATUS_COLOR[ev.status] || "FF000000" },
     };
 
+    // [2026-07-23] 상황발생 내용/진행현황이 길어서 셀보다 넘치면 행 높이를 늘림 —
+    // 평소(사진 들어가는 짧은 내용)엔 사진 기준 최소 높이 그대로.
+    ws.getRow(row).height = computeRowHeight(ev.memo, progressText);
+
     const photos = await resolvePhotoBuffers(ev);
     await embedPhotos(wb, ws, row, photos);
   }
 
-  // 안 쓰는 데이터 행 삭제 (6~105행엔 병합이 없어서 splice가 안전함)
+  // [2026-07-23 버그 수정] ExcelJS spliceRows()가 요청한 만큼 행을 실제로 지우지 못하는
+  // 문제를 확인함(값은 옮겨지는데 실제 행 개수/치수가 거의 안 줄어듦) — "지우는" 대신
+  // "숨기고" 인쇄범위로 실제 찍히는 범위만 제한하는 방식으로 바꿈. 안 쓰는 행이 숨겨지고
+  // 106행(초과 안내)도 더 이상 splice로 밀려 올라오지 않아 위치가 항상 고정.
   const lastFilledRow = REPORT_DATA_START_ROW + mapped.length - 1;
   const lastTemplateRow = REPORT_DATA_START_ROW + REPORT_MAX_ROWS - 1; // 105
-  if (lastFilledRow < lastTemplateRow) {
-    ws.spliceRows(lastFilledRow + 1, lastTemplateRow - lastFilledRow);
+  const OVERFLOW_ROW = REPORT_DATA_START_ROW + REPORT_MAX_ROWS;        // 106, 고정 위치
+
+  for (let r = lastFilledRow + 1; r <= lastTemplateRow; r++) {
+    ws.getRow(r).hidden = true;
   }
 
-  // 106행(초과 안내, splice로 이미 당겨져 올라와 있음) — 초과 없으면 그냥 삭제
-  const overflowRow = lastFilledRow + 1;
   let finalLastRow;
   if (total > REPORT_MAX_ROWS) {
-    ws.getCell(overflowRow, 1).value =
+    ws.getCell(OVERFLOW_ROW, 1).value =
       `⚠️ 조회 기간 내 이벤트가 ${total}건으로 100건을 초과하여 최신 100건만 표시되었습니다. ` +
       `(초과 ${total - REPORT_MAX_ROWS}건 · 기간을 좁혀 다시 조회해주세요)`;
-    finalLastRow = overflowRow;
+    finalLastRow = OVERFLOW_ROW;
   } else {
-    ws.spliceRows(overflowRow, 1);
+    ws.getRow(OVERFLOW_ROW).hidden = true;
     finalLastRow = lastFilledRow;
   }
 
-  // [2026-07-23 버그 수정] spliceRows()는 셀 값은 옮겨주지만 인쇄범위(printArea)는
-  // 갱신 안 해줘서 템플릿 원본값("A1:K106")에 그대로 고정돼 있었음 — 실제 데이터가
-  // 몇 행에서 끝나든 인쇄범위가 항상 106행까지로 잡혀서 양식과 다르게 인쇄되는 원인이었음.
-  // 매핑 후 실제 마지막 행 기준으로 매번 다시 계산해서 맞춰준다.
+  // 매핑 후 실제 마지막 행 기준으로 인쇄범위를 매번 다시 계산해서 맞춘다
+  // (템플릿 원본값 "A1:K106"에 고정돼 있으면 실제 데이터와 어긋남).
   ws.pageSetup.printArea = `A1:K${finalLastRow}`;
 
   return wb;
