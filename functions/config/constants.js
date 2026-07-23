@@ -78,7 +78,7 @@ module.exports = {
   REPORT_TEMPLATE_SHEET: "양식",
   REPORT_DATA_START_ROW: 6,   // 첫 데이터 행
   REPORT_MAX_ROWS: 100,       // 6~105행 = 최대 100건
-  REPORT_PHOTO_SIZE_PX: 170,  // 4.5cm @ 96dpi (템플릿 실측 셀 크기와 동일)
+  REPORT_PHOTO_SIZE_PX: 227,  // 6cm @ 96dpi (2026-07-23: 4.5cm→6cm 확대, F/G/H열 너비·행높이도 템플릿에서 같은 비율로 같이 키움)
   REPORT_STATUS_COLOR: {
     "발생":   "FFFF0000", // 빨강
     "조치중": "FF2E75B6", // 파랑

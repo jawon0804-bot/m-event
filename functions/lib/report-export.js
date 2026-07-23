@@ -64,11 +64,15 @@ function buildTitle(startStr, endStr, center) {
 // events.history 배열에서 최초 발생(memo)과 이후 조치 이력(진행현황 텍스트)을 분리
 // ※ 최초 발생 내용은 history[0]이 아니라 이벤트 문서 자체의 memo 필드를 그대로 씀
 //   (events-tab.js 모달의 제목도 currentEvent.memo를 씀 — 두 군데가 어긋나지 않게 통일)
+// [2026-07-23] 각 줄 끝에 작성자(*이름*)를 붙임 — 누가 조치/완료 처리했는지 J열만 보고도 알 수 있게
 function buildProgressText(history) {
   const list = Array.isArray(history) ? history : [];
   return list
     .filter(h => h.type !== "발생")
-    .map(h => `${fmtTimestampKst(h.at)}\n${h.content || ""}`)
+    .map(h => {
+      const line = `${fmtTimestampKst(h.at)}\n${h.content || ""}`;
+      return h.by ? `${line} *${h.by}*` : line;
+    })
     .join("\n");
 }
 
