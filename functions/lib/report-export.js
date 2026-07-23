@@ -15,6 +15,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const ExcelJS = require("exceljs");
+const JSZip = require("jszip");
 const { admin, db, bucket } = require("./firebase");
 const { getKstDateParts } = require("./dateUtils");
 const {
@@ -268,13 +269,47 @@ async function buildReportWorkbook({ center, start, end, events }) {
 
   // 매핑 후 실제 마지막 행 기준으로 인쇄범위를 매번 다시 계산해서 맞춘다
   // (템플릿 원본값 "A1:K106"에 고정돼 있으면 실제 데이터와 어긋남).
-  // [2026-07-23 버그 수정] ExcelJS가 printArea 문자열을 쓸 때 열(A/K)엔 "$"를 자동으로
-  // 붙이면서 행 번호엔 안 붙여서 "$A1:$K7"처럼 불완전한 절대참조가 되고, 이게 엑셀에서
-  // "내용에 문제가 있습니다(복구)" 경고를 띄우던 원인이었음. 행 번호 쪽에 "$"를 직접
-  // 넣어주면 결과적으로 정상적인 "$A$1:$K$7" 형태로 나옴(직접 검증함).
+  // ExcelJS가 printArea 문자열을 쓸 때 열(A/K)엔 "$"를 자동으로 붙이면서 행 번호엔 안
+  // 붙이는 버릇이 있어서, 행 번호 쪽에 "$"를 직접 넣어 정상적인 "$A$1:$K$7" 형태로 나오게 함
+  // (이 자체가 손상 경고의 원인은 아니었지만 — 진짜 원인은 아래 writeReportBuffer 참고 —
+  //  절대참조 형태를 맞춰두는 게 맞아서 그대로 둠).
   ws.pageSetup.printArea = `A$1:K$${finalLastRow}`;
 
   return wb;
+}
+
+// ==============================================================================
+// [2026-07-23 버그 수정] "내용에 문제가 있습니다(복구하시겠습니까?)" 경고의 진짜 원인.
+// buildReportWorkbook에서 ws.pageSetup.fitToPage = true를 켜면, ExcelJS가 기존
+// <sheetPr>에 <pageSetUpPr>을 끼워 넣으면서 <outlinePr>보다 앞에 써버림
+// (실제: <pageSetUpPr/><outlinePr/> / OOXML이 요구하는 순서: <outlinePr/><pageSetUpPr/>).
+// CT_SheetPr는 자식 순서를 엄격히 강제하는 타입이라 이 순서 위반만으로 엑셀이 파일을
+// 손상됐다고 판단함 — ExcelJS 자체 버그라 라이브러리 옵션으로는 못 피하고, 저장된
+// buffer의 XML을 직접 열어서 두 태그 순서를 바꾼 뒤 다시 압축하는 방식으로 우회한다.
+// (fitToPage를 계속 켜 놓고 있으니 매핑/월간 자동생성 양쪽 다 이 후처리를 거쳐야 함.)
+// ==============================================================================
+async function fixSheetPrOrder(buf) {
+  const zip = await JSZip.loadAsync(buf);
+  const path = "xl/worksheets/sheet1.xml";
+  const file = zip.file(path);
+  if (!file) return buf; // 못 찾으면 원본 그대로 반환 (방어적 처리)
+
+  let xml = await file.async("string");
+  const fixed = xml.replace(
+    /<sheetPr>(<pageSetUpPr[^>]*\/>)(<outlinePr[^>]*\/>)<\/sheetPr>/,
+    "<sheetPr>$2$1</sheetPr>"
+  );
+  if (fixed === xml) {
+    console.warn("[이벤트 보고서] sheetPr 순서 패턴을 못 찾음 — ExcelJS 출력 형식이 바뀌었을 수 있음");
+    return buf;
+  }
+  zip.file(path, fixed);
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+async function writeReportBuffer(wb) {
+  const buf = await wb.xlsx.writeBuffer();
+  return fixSheetPrOrder(buf);
 }
 
 // ==============================================================================
@@ -316,7 +351,7 @@ exports.generateEventReport = onCall({ timeoutSeconds: 300, memory: "512MiB" }, 
       const wb = await buildReportWorkbook({ center: c, start, end, events });
       const fileName = `${start}~${end}_매핑.xlsx`;
       const filePath = `report/${c}/${fileName}`;
-      const buf = await wb.xlsx.writeBuffer();
+      const buf = await writeReportBuffer(wb);
       await bucket.file(filePath).save(buf, {
         contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
@@ -364,7 +399,7 @@ exports.eventReportMonthlyExport = onSchedule(
         }
         const wb = await buildReportWorkbook({ center, start, end, events });
         const filePath = `report/${center}/${py}년_${pm}월_이벤트보고서.xlsx`;
-        const buf = await wb.xlsx.writeBuffer();
+        const buf = await writeReportBuffer(wb);
         await bucket.file(filePath).save(buf, {
           contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
