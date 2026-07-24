@@ -10,7 +10,7 @@ async function login() {
   errEl.textContent = "";
   if (!name || !phone) { errEl.textContent = "이름과 전화번호를 입력하세요."; return; }
 
-  if (btnEl) { btnEl.disabled = true; btnEl.textContent = "로그인 중..."; }
+  if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 로그인 중...`; }
   try {
     const callLogin = functions.httpsCallable("loginWithCredentials");
     const res = await callLogin({ name, phone, app: "m-event" }); // password는 향후 도입 시 여기에 추가
@@ -24,7 +24,7 @@ async function login() {
     // HttpsError의 message는 "resource-exhausted: 로그인 시도가..." 형태로 오므로 콜론 앞부분 제거
     errEl.textContent = (e.message || "").replace(/^[a-z-]+:\s*/i, "") || "로그인 중 오류가 발생했습니다.";
   } finally {
-    if (btnEl) { btnEl.disabled = false; btnEl.textContent = "로그인"; }
+    if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = "로그인"; }
   }
 }
 
