@@ -6,6 +6,7 @@
   --gray3: #9ca3af; --gray4: #6b7280; --gray5: #374151;
   --text:  #111827;
 }
+html, body { overflow-x: hidden; } /* 근무일지 표처럼 넓은 콘텐츠가 있어도 페이지 전체가 옆으로 밀려서 헤더/탭이 잘리는 것 방지 */
 body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background: var(--gray0); color: var(--text); }
 
 /* ── 로그인 ── */
@@ -42,7 +43,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   display: flex; align-items: center; height: 56px; gap: 16px;
   position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2);
 }
-.header h1    { font-size: 22px; font-weight: 800; flex: 1; letter-spacing: -0.5px; }
+.header h1    { font-size: 22px; font-weight: 800; flex: 1; letter-spacing: -0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .header .user { font-size: 11px; color: rgba(255,255,255,.6); }
 .logout-btn { display: none; }
 .hidden-logout-btn {
@@ -72,7 +73,9 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .main-tabs {
   background: var(--navy2); display: flex; padding: 0 24px;
   position: sticky; top: 52px; z-index: 99;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; /* 탭이 화면보다 넓을 때 탭바만 독립적으로 스와이프 — body는 안 움직임 */
 }
+.main-tabs::-webkit-scrollbar { display: none; }
 .main-tab {
   padding: 12px 20px; font-size: 14px; font-weight: 600; color: rgba(255,255,255,.6);
   border-bottom: 3px solid transparent; cursor: pointer; transition: all .15s;
@@ -425,8 +428,27 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-sheet .cell-input input[type="text"] { text-align: center; }
 .wl-sheet .cell-input.wl-left input[type="text"] { text-align: left; padding-left: 6px; }
 .wl-locked input { background: #f3f4f6 !important; color: var(--gray5); cursor: default; }
-.wl-locked-admin input { background: #fff7ed !important; cursor: pointer; }
 .wl-active input { background: #eff6ff !important; }
+
+.wl-sheet .cell-input { position: relative; }
+.cell-input.wl-left:has(.wl-line-btns) input {
+  padding-right: 60px; /* wl-line-btns(▲▼🗑) 폭만큼 항상 예약 — 긴 텍스트가 버튼 밑에 가려지지 않게.
+    작업내용류(wl-left)만 대상 — 재고/체크 같은 좁은 칸까지 적용하면 평소 보이는 글자 수가 너무 줄어듦 */
+}
+.wl-line-btns {
+  position: absolute; top: 1px; right: 1px; bottom: 1px;
+  display: none; align-items: center; gap: 2px; padding: 0 2px;
+  background: linear-gradient(to left, #fff 65%, transparent);
+}
+.cell-input:hover .wl-line-btns, .cell-input:focus-within .wl-line-btns { display: flex; }
+.wl-line-btn {
+  border: 1px solid #ccc; background: #fff; border-radius: 3px;
+  font-size: 9px; line-height: 1; padding: 2px 3px; cursor: pointer; color: #555;
+}
+.wl-line-btn:hover { background: #eef4ff; }
+.wl-line-btn:disabled { opacity: .3; cursor: not-allowed; }
+.wl-line-btn.wl-del { color: #c0392b; border-color: #f3c6c6; }
+.wl-line-btn.wl-del:hover { background: #fdecea; }
 
 /* ── 근무일지: 월별 점검표 다운로드 박스 ── */
 /* ── 근무일지: 월별 점검표 다운로드 박스 (좌측 사이드바, 3열) ── */
@@ -453,6 +475,10 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
   #wl-subpage-diary { flex-direction: column; }
   .wl-month-panel { width: 100%; }
   .wl-month-grid { grid-template-columns: repeat(6, 1fr); }
+}
+@media (max-width: 480px) {
+  /* 표(1229px)를 스크롤 없이 화면 폭에 맞춰 축소 — 실제 입력은 브라우저 핀치줌으로 확대해서 사용 */
+  .wl-table-wrap { zoom: 0.28; }
 }
 
 /* ── 출근부 원본 미리보기 표 ──

@@ -77,6 +77,8 @@ function wlInit() {
   if (el) el.textContent = `(${wlWorkday} 근무일)`;
   const titleEl = document.getElementById("wl-title-text");
   if (titleEl) titleEl.textContent = `${wlCenter} ${WL_TITLE_SUFFIX}`;
+  const centerLabelEl = document.getElementById("wl-center-label");
+  if (centerLabelEl) centerLabelEl.textContent = `📓 ${wlCenter}`;
   // 날짜 입력칸 기본값 = 오늘 근무일 (Firestore에 저장된 값이 있으면 onSnapshot이 곧 덮어씀)
   const dateEl = document.getElementById("date_input");
   if (dateEl && !dateEl.value) dateEl.value = wlWorkday;
@@ -171,7 +173,7 @@ function wlSubscribe() {
   // 줄 단위 섹션 6개 구독
   for (const key of Object.keys(WL_SECTIONS)) {
     const sub = WL_SECTIONS[key].sub;
-    const unsub = wlBaseDocRef.collection(sub).orderBy("created_at","asc").onSnapshot(snap => {
+    const unsub = wlBaseDocRef.collection(sub).orderBy("order","asc").onSnapshot(snap => {
       wlState[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       wlRenderSection(key);
     }, e => console.error(`[근무일지] ${key} 구독 오류:`, e));
@@ -179,11 +181,26 @@ function wlSubscribe() {
   }
 }
 
-// 본인 글 또는 관리자만 수정 가능
-function wlCanEdit(entry) {
-  if (!entry) return true; // 아직 없는(빈) 슬롯 → 누구나 새로 작성 가능
-  if (currentUser.active === true || currentUser.center_name === "Master") return true;
-  return entry.created_by === currentUser.name;
+// 같은 센터로 로그인한 사람은 누구나(Master 포함) 수정/삭제/재정렬 가능 — Firestore 규칙이
+// 이미 센터 단위로 write를 허용하므로, 프론트에서 작성자 본인/관리자로 더 좁힐 필요 없음
+function wlNextOrder(entries) {
+  if (!entries.length) return 0;
+  return Math.max(...entries.map(e => (typeof e.order === "number" ? e.order : -1))) + 1;
+}
+
+// 버튼 클러스터(▲▼🗑) 표시/비활성 상태 갱신 — 실제 항목이 있는 슬롯에서만 노출
+function wlUpdateLineBtns(btnsId, i, entriesLen) {
+  const btns = document.getElementById(btnsId);
+  if (!btns) return;
+  if (i < entriesLen) {
+    btns.style.display = "flex";
+    const upBtn = btns.querySelector(".wl-up");
+    const downBtn = btns.querySelector(".wl-down");
+    if (upBtn) upBtn.disabled = i === 0;
+    if (downBtn) downBtn.disabled = i === entriesLen - 1;
+  } else {
+    btns.style.display = "none";
+  }
 }
 
 // 심플 섹션(작업내용 한 줄짜리: dayWork/dayCheck/nightWork/nightNote) 렌더링
@@ -197,28 +214,27 @@ function wlRenderSimpleSection(key) {
     const entry = entries[i];
     if (entry) {
       inp.value = entry.content || "";
-      const editable = wlCanEdit(entry);
-      inp.readOnly = !editable;
-      td.classList.toggle("wl-locked", !editable);
-      td.classList.toggle("wl-locked-admin", editable && entry.created_by !== currentUser.name);
+      inp.readOnly = false;
+      td.classList.remove("wl-locked");
       td.classList.remove("wl-active");
       inp.title = `작성: ${entry.created_by||""}` + (entry.edited_by && entry.edited_by!==entry.created_by ? ` · 수정: ${entry.edited_by}` : "");
-      inp.onblur = editable ? () => wlSaveLine(key, i, inp.value) : null;
+      inp.onblur = () => wlSaveLine(key, i, inp.value);
     } else if (i === entries.length) {
       inp.value = "";
       inp.readOnly = false;
-      td.classList.remove("wl-locked","wl-locked-admin");
+      td.classList.remove("wl-locked");
       td.classList.add("wl-active");
       inp.title = "";
       inp.onblur = () => { if (inp.value.trim()) wlSaveLine(key, i, inp.value); };
     } else {
       inp.value = "";
       inp.readOnly = true;
-      td.classList.remove("wl-active","wl-locked-admin");
+      td.classList.remove("wl-active");
       td.classList.add("wl-locked");
       inp.title = "";
       inp.onblur = null;
     }
+    wlUpdateLineBtns(`${key}_btns_${i+1}`, i, entries.length);
   });
 }
 
@@ -228,7 +244,6 @@ function wlRenderMultiSection(key) {
   const entries = wlState[key];
   meta.rows.forEach((rowFids, i) => {
     const entry = entries[i];
-    const editable = entry ? wlCanEdit(entry) : true;
     const isNext = !entry && i === entries.length;
     Object.keys(rowFids).forEach(sub => {
       const fid = rowFids[sub];
@@ -237,26 +252,61 @@ function wlRenderMultiSection(key) {
       const td = inp.closest("td");
       if (entry) {
         inp.value = entry[sub] || "";
-        inp.readOnly = !editable;
-        td.classList.toggle("wl-locked", !editable);
-        td.classList.toggle("wl-locked-admin", editable && entry.created_by !== currentUser.name);
+        inp.readOnly = false;
+        td.classList.remove("wl-locked");
         td.classList.remove("wl-active");
-        inp.onblur = editable ? () => wlSaveMultiLine(key, i, rowFids) : null;
+        inp.onblur = () => wlSaveMultiLine(key, i, rowFids);
       } else if (isNext) {
         inp.value = "";
         inp.readOnly = false;
-        td.classList.remove("wl-locked","wl-locked-admin");
+        td.classList.remove("wl-locked");
         td.classList.add("wl-active");
         inp.onblur = () => wlSaveMultiLine(key, i, rowFids);
       } else {
         inp.value = "";
         inp.readOnly = true;
         td.classList.add("wl-locked");
-        td.classList.remove("wl-active","wl-locked-admin");
+        td.classList.remove("wl-active");
         inp.onblur = null;
       }
     });
+    wlUpdateLineBtns(`${key}_btns_${i+1}`, i, entries.length);
   });
+}
+
+// 줄 삭제 — order 재계산은 불필요(정렬 후 고정 슬롯에 순서대로 채워지므로 구멍이 있어도 자연스럽게 당겨져 보임)
+async function wlDeleteLine(key, idx) {
+  const meta = WL_SECTIONS[key];
+  const entry = wlState[key][idx];
+  if (!entry) return;
+  if (!confirm("이 줄을 삭제하시겠습니까?")) return;
+  try {
+    await wlBaseDocRef.collection(meta.sub).doc(entry.id).delete();
+  } catch (e) {
+    console.error(`[근무일지] ${key} 삭제 실패:`, e);
+    alert("삭제 중 오류가 발생했습니다.");
+  }
+}
+
+// 줄 순서 변경 — 바로 위/아래 줄과 order 값을 트랜잭션으로 스왑 (동시 클릭 시 순서 꼬임 방지)
+async function wlMoveLine(key, idx, dir) {
+  const meta = WL_SECTIONS[key];
+  const entries = wlState[key];
+  const otherIdx = idx + dir;
+  const a = entries[idx], b = entries[otherIdx];
+  if (!a || !b) return;
+  const sub = wlBaseDocRef.collection(meta.sub);
+  const aRef = sub.doc(a.id), bRef = sub.doc(b.id);
+  try {
+    await db.runTransaction(async (tx) => {
+      const [aSnap, bSnap] = await Promise.all([tx.get(aRef), tx.get(bRef)]);
+      tx.update(aRef, { order: bSnap.data().order });
+      tx.update(bRef, { order: aSnap.data().order });
+    });
+  } catch (e) {
+    console.error(`[근무일지] ${key} 순서 변경 실패:`, e);
+    alert("순서 변경 중 오류가 발생했습니다.");
+  }
 }
 
 function wlRenderSection(key) {
@@ -280,6 +330,7 @@ async function wlSaveLine(key, idx, value) {
     } else {
       await sub.add({
         content: value.trim(),
+        order: wlNextOrder(entries),
         created_by: currentUser.name,
         created_at: firebase.firestore.FieldValue.serverTimestamp(),
         edited_by: currentUser.name,
@@ -315,6 +366,7 @@ async function wlSaveMultiLine(key, idx, rowFids) {
     } else {
       await sub.add({
         ...payload,
+        order: wlNextOrder(entries),
         created_by: currentUser.name,
         created_at: firebase.firestore.FieldValue.serverTimestamp(),
         edited_by: currentUser.name,

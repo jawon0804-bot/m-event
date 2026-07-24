@@ -185,7 +185,7 @@ exports.workLogDailyExport = onSchedule(
         const payload = { base: baseSnap.data() };
         for (const sub of ["dayWork", "dayCheck", "nightWork", "nightNote", "legal", "material"]) {
           const subSnap = await db.collection("work_logs").doc(docId).collection(sub)
-            .orderBy("created_at", "asc").get();
+            .orderBy("order", "asc").get();
           payload[sub] = subSnap.docs.map(d => d.data());
         }
 
