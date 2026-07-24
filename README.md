@@ -109,7 +109,7 @@ UserDB에서 이름이 일치하는 사람을 최대 5명까지 조회
 | 이벤트 탭 | 발생한 이슈 목록 (실시간 갱신), 진행중/완료 구분, 상태 변경 | 모든 사용자 |
 | 엑셀 탭 | 생성된 엑셀 점검 보고서 다운로드 | 모든 사용자 |
 | 사진 탭 | 점검 시 첨부된 사진 모아보기 | 모든 사용자 |
-| 보고서 탭 | (양식 준비 중 — 아직 빈 안내 문구만 있음) | 🔒 관리자만 |
+| 보고서 탭 | 기간 내 이벤트를 엑셀(EVENT LIST 양식)로 매핑·다운로드 — 아래 "📊 이벤트 보고서" 섹션 참고 | 🔒 관리자만 |
 
 ### 🔒 보고서 탭이 보이는 조건
 ```js
@@ -117,7 +117,7 @@ const isAdminOrMaster = currentUser.active === true || currentUser.center_name =
 ```
 즉 `active: true`(관리자)이거나 `center_name: "Master"`(전체 관리자)인 경우에만 탭이 보여요.
 
-> ⚠️ **현재 상태**: 보고서 탭은 코드상 권한 체크는 다 되어 있는데, 실제 내용은 "양식 준비 중입니다"라는 안내 문구만 있어요. 기능 자체는 아직 미완성이에요.
+> ✅ **[2026-07-23] 구현 완료**: 예전엔 권한 체크만 되어 있고 "양식 준비 중입니다"라는 안내 문구뿐이었는데, 지금은 [매핑]/[다운로드] 버튼으로 실제 엑셀 생성·다운로드가 동작해요. 자세한 구조는 아래 "📊 이벤트 보고서" 섹션 참고.
 
 ---
 
@@ -228,6 +228,52 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 
 ---
 
+## 📊 이벤트 보고서 (report) — 보고서 탭의 엑셀 내보내기 기능
+
+> `events` 컬렉션의 발생/조치/완료 이력을 센터 단위로 모아서 엑셀(EVENT LIST 양식)로 매핑·다운로드하는 기능이에요. 근무일지처럼 "Storage에 저장된 원본 양식을 그대로 복제해서 값만 채우는" 방식을 그대로 재사용했어요.
+
+### 무엇을 하나요?
+- 보고서 탭에서 센터/상태/기간(최대 1년)을 골라 **[매핑]**을 누르면, 최신순으로 최대 100건을 골라 엑셀에 채워서 Storage에 저장해요.
+- **[다운로드]**를 누르면 그 센터에 이미 매핑돼 있는 파일 목록(수동 매핑분 + 자동 생성분)을 보여주고, 골라서 받을 수 있어요.
+- 매달 1일 00:00(Asia/Seoul)에는 필터 없이 **전월 전체**를 센터별로 자동 매핑해서 같은 위치에 쌓아줘요.
+
+### 데이터 구조
+| Storage 위치 | 역할 |
+|---|---|
+| `templates/report/event.xlsx` | 이벤트 보고서 원본 양식 (시트 "양식") — **센터 공용 1개**, 모든 센터가 이 템플릿 하나를 같이 씀 (근무일지 템플릿과 달리 센터별로 안 나뉨) |
+| `report/{center}/{start}~{end}_매핑.xlsx` | 보고서 탭에서 수동으로 [매핑]한 결과물 |
+| `report/{center}/{연도}년_{월}월_이벤트보고서.xlsx` | 매달 1일 자동 생성되는 전월 보고서 |
+
+### 양식 구조 (매핑 좌표)
+- **A1:K4(병합)**: 제목 — 코드가 매번 `"{시작일} ~ {종료일} {센터명}센터 시설설비 EVENT LIST"` 형태로 채움 (시작/종료가 같은 해면 종료일 쪽 "년" 생략, 해가 걸치면 양쪽 다 표기)
+- **5행**: 헤더(번호/센터명/발생일시/설비 위치/점검자/사진1~3/상황발생 내용/진행현황/상태) — 라벨은 템플릿에 고정, 코드가 새로 안 씀
+- **6~105행**: 데이터 100행 — A열에 1~100 번호가 미리 채워져 있고, 최신순으로 정렬된 이벤트를 위에서부터 채움. 사진은 셀 값이 아니라 F/G/H 각 셀에 4.5×4.5cm 이미지로 직접 삽입돼요. 상태(K열)는 발생=빨강/조치중=파랑/완료=초록으로 색이 자동으로 바뀌어요.
+- **106행**: 100건 초과 시에만 쓰이는 안내 행 — "최신 100건만 표시됨, 초과 N건은 기간을 좁혀 다시 조회" 문구가 들어가고, 100건 이하면 이 행 자체를 지워버려요.
+- 안 쓰는 데이터 행(예: 매핑된 이벤트가 10건이면 11~105행)은 매핑 후 통째로 삭제해서 빈 줄이 남지 않아요.
+
+### 관련 Functions (`functions/lib/report-export.js`)
+
+| 함수 이름 | 타입 | 언제/어떻게 실행되나요? |
+|---|---|---|
+| `generateEventReport` | Callable | 보고서 탭 [매핑] 버튼 → 필터(센터/상태/기간) 받아서 즉시 생성. 센터 미지정("전체") + Master면 전체 센터 순회 |
+| `listEventReportFiles` | Callable | 보고서 탭 [다운로드] 버튼 → `report/{center}/` 목록 + 서명URL(10분 유효) 반환 |
+| `eventReportMonthlyExport` | Scheduled (매달 1일 00:00 Asia/Seoul) | 필터 없이 전월 전체를 센터별로 자동 매핑 |
+
+> ⚠️ 다른 함수들처럼 배포 시 codebase 프리픽스 필요: `firebase deploy --only functions:m-event:generateEventReport,functions:m-event:eventReportMonthlyExport,functions:m-event:listEventReportFiles`
+
+### 왜 다운로드 링크를 매번 새로 발급하나요?
+`listEventReportFiles`가 반환하는 다운로드 URL은 10분짜리 서명 URL이에요 — 파일 자체는 Storage에 계속 남아있고, [다운로드] 버튼을 다시 누르면 그때마다 새 링크가 발급돼요. 링크 유효기간을 짧게 잡은 건 비용 때문이 아니라(서명 URL 발급 자체는 무료) **유출된 링크가 오래 살아있지 않게 하려는 보안 목적**이에요.
+
+### Dashboard(facility-dashboard) 연동
+[2026-07-23] Dashboard의 3번 뷰(피봇 테이블) "이벤트 보고서" 팝업도 이 Storage 경로(`report/{center}/`)를 그대로 읽어서 보여주도록 바뀌었어요 — 원래 Dashboard가 보여주던 설비별 점검표(`Maxerve_Excel`)는 대체됐어요. 자세한 내용은 Dashboard 레포의 README "🕰️ 변경 이력" 참고.
+
+### 트러블슈팅 메모
+- [매핑]을 눌렀는데 아무 파일도 안 생기면 → 그 센터/기간/상태 조합으로 조회된 `events`가 0건이면 조용히 스킵돼요(정상 동작). Functions 로그(`firebase functions:log --only generateEventReport`)에서 `skipped` 결과 확인
+- `center_name` + `status` + `created_at` 범위를 같이 거는 쿼리라 Firestore 복합 색인이 필요할 수 있어요 — 처음 실행 시 에러 메시지에 색인 생성 링크가 자동으로 찍혀요
+- 템플릿(`templates/report/event.xlsx`)이 Storage에서 지워지거나 시트명("양식")이 바뀌면 매핑 자체가 실패해요 — 양식을 고칠 땐 셀 구조(6~105행 데이터, 106행 안내)를 유지해야 코드 좌표와 안 어긋나요
+
+---
+
 ## 📆 근무일지 (work_log) — 이벤트 트래커와는 별도의 기능
 
 > m-event는 이벤트/이슈 관리 외에 **센터별 근무일지(일일 근무 기록 + 엑셀 보고서 자동 생성)** 기능도 같이 갖고 있어요. 이벤트 트래커와는 별개의 탭/데이터 흐름이에요.
@@ -281,7 +327,7 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 | 백엔드 | Firebase Functions 2nd Gen (Node.js 22, `asia-northeast3`) — 자체 서버 없음, 설비 이름 표시만 Dashboard API에 의존 |
 | 인증 | Firebase Auth (Custom Token 발급 방식) + 커스텀 로그인 잠금 로직 |
 | 데이터베이스 | Firestore (`events`, `inspection_logs`, `UserDB`, `login_attempts`, `login_lockouts`, `Maxerve_Excel`, `settings/all_centers`, `work_logs`, `center_configs`) |
-| 파일 저장소 | Firebase Storage (사진, 근무일지/출근부 템플릿) |
+| 파일 저장소 | Firebase Storage (사진, 근무일지/출근부 템플릿, 이벤트 보고서 템플릿/결과물) |
 | 메일 발송 | Nodemailer + Gmail SMTP (Secret Manager로 인증정보 관리) |
 | 배포 | Firebase Hosting + Functions (GitHub Actions CI/CD) |
 
@@ -290,7 +336,8 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 ## ❓ 더 알아야 할 것들 (확인 필요)
 
 - [ ] GitHub 레포 주소 → `jawon0804-bot/m-event`로 확인됨
-- [ ] 보고서 탭의 실제 구현 일정 (현재는 "준비 중" 안내만 있음)
+- [x] 보고서 탭 구현 완료 (2026-07-23, "📊 이벤트 보고서" 섹션 참고)
+- [ ] 이벤트 보고서(`report/{center}/`) 파일이 계속 쌓이기만 하는데, 오래된 파일 정리(수명주기) 정책이 필요한지
 - [ ] `UserDB` 문서 ID가 전부 Auth UID로 쓸 수 있는 형식(특수문자/공백 없음)인지 확인 필요
 - [ ] `allowed_apps` 필드가 실제 데이터에 얼마나 채워져 있는지 Firestore 콘솔에서 확인 필요 (대부분 미설정=전체허용 상태로 추정)
 
