@@ -158,6 +158,10 @@ async function buildCenterFilters() {
         centers.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
     }
   }
+
+  // 보고서 탭 서브탭 앞 센터 라벨 (근무일지 탭의 wl-center-label과 동일한 패턴)
+  const reportLabelEl = document.getElementById("report-center-label");
+  if (reportLabelEl) reportLabelEl.textContent = isMaster ? "📊 전체 센터" : `📊 ${currentUser.center_name}`;
 }
 
 // ──────────────────────────────────────────────

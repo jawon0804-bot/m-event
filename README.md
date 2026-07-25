@@ -282,7 +282,9 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 
 ### 무엇을 하나요?
 - 센터 + 월(`YYYY-MM`)을 고르고 **[조회]**를 누르면, 그 달에 그 센터 이름으로 생성된 `Maxerve_Excel` 문서를 전부 가져와서 `(schedule_type, sheet_label)` 조합별로 개수를 세고 표로 보여줘요.
-- 표 컬럼: 구분(daily/weekly/monthly) · 설비명(sheet_label) · 개수
+- 표 컬럼: 구분(daily/weekly/monthly) · 설비명(sheet_label) · **기대**(2026-07-26 추가) · **실제** · **상태**(정상/⚠️ 부족, 2026-07-26 추가)
+- 🆕 **[2026-07-26] 기대 횟수 계산 추가**: `calcExpectedCount()`(`manager/js/report-tab.js`)가 M-Engine `lib/scheduler.py`의 `calc_expected_count()`와 동일한 로직(daily=그 달 일수, monthly=1, weekly=그 달 월요일 수)을 JS로 재구현해서, 실제 개수와 비교한 상태(정상/부족)까지 한 화면에서 바로 보여줘요. 로직이 단순해서 두 언어에 따로 구현해도 어긋날 위험은 낮다고 보고 이렇게 감(M-Engine에 API를 새로 만들어 호출하는 대신).
+- 🆕 **[2026-07-26] 센터명 라벨 추가**: 근무일지 탭의 `wl-center-label`과 동일한 패턴으로, 서브탭(이벤트/점검표) 앞에 로그인한 센터명을 보여주는 라벨(`report-center-label`)을 추가했어요. Master는 "📊 전체 센터", 그 외에는 "📊 {센터명}"으로 표시(`buildCenterFilters()`에서 설정).
 
 ### 데이터 출처 및 제약
 - `schedule_type`/`sheet_label`은 M-Engine이 **2026-07-25부터** `Maxerve_Excel` 문서 생성 시 같이 저장하는 필드예요(M-Engine 레포 README "2026-07-25" 항목 참고). **그 이전에 생성된 문서는 이 두 필드가 없어서 집계에서 제외**되고, 화면에 "N건은 구분/설비명 정보가 없어 집계에서 제외됨"으로 안내돼요.
@@ -291,8 +293,8 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 ### 관련 파일
 | 파일 | 역할 |
 |---|---|
-| `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더) |
-| `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트도 같이 채움 |
+| `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더), `calcExpectedCount()`(기대 횟수 계산) |
+| `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트 및 `report-center-label` 채움 |
 
 ### 트러블슈팅 메모
 - 조회했는데 표가 비어있으면 → 그 달에 그 센터 이름으로 생성된 문서가 아예 없거나(정상), 전부 2026-07-25 이전 생성분이라 필드가 없어서 집계 대상에서 빠진 것(정상, 위 "제외됨" 안내 문구 확인)

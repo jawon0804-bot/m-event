@@ -20,6 +20,22 @@ function prevMonthStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// M-Engine의 lib/scheduler.py calc_expected_count()와 동일한 로직(JS 버전).
+// daily=그 달 일수, monthly=1, weekly=그 달 월요일 수. 그 외/알 수 없는 값은 null.
+function calcExpectedCount(scheduleType, year, month) {
+  const daysInMonth = new Date(year, month, 0).getDate(); // month: 1~12
+  if (scheduleType === "daily") return daysInMonth;
+  if (scheduleType === "monthly") return 1;
+  if (scheduleType === "weekly") {
+    let count = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      if (new Date(year, month - 1, day).getDay() === 1) count++; // 1 = 월요일
+    }
+    return count;
+  }
+  return null;
+}
+
 // ──────────────────────────────────────────────
 // 점검표 현황: Maxerve_Excel을 schedule_type/sheet_label 기준으로 월별 집계
 // (center_configs 조인 없이 Maxerve_Excel 하나만 스캔 — 두 필드는 2026-07-25
@@ -70,19 +86,28 @@ async function loadInspectionReport() {
       groups[key] = (groups[key] || 0) + 1;
     });
 
+    const [year, monthNum] = month.split("-").map(Number);
     const typeOrder = { daily: 0, weekly: 1, monthly: 2 };
     const rows = Object.entries(groups)
       .map(([key, count]) => {
         const [stype, label] = key.split("|||");
-        return { stype, label, count };
+        const expected = calcExpectedCount(stype, year, monthNum);
+        return { stype, label, count, expected };
       })
       .sort((a, b) => (typeOrder[a.stype] ?? 9) - (typeOrder[b.stype] ?? 9) || a.label.localeCompare(b.label));
 
+    const badge = (ok) => ok
+      ? `<span style="background:#dcfce7;color:#15803d;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap">정상</span>`
+      : `<span style="background:#fee2e2;color:#dc2626;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap">⚠️ 부족</span>`;
+
     let html = `
       <table class="insp-report-table">
-        <thead><tr><th>구분</th><th>설비명</th><th>개수</th></tr></thead>
+        <thead><tr><th>구분</th><th>설비명</th><th>기대</th><th>실제</th><th>상태</th></tr></thead>
         <tbody>
-          ${rows.map(r => `<tr><td>${esc(r.stype)}</td><td>${esc(r.label)}</td><td>${r.count}</td></tr>`).join("")}
+          ${rows.map(r => {
+            const ok = r.expected === null ? true : r.count >= r.expected;
+            return `<tr><td>${esc(r.stype)}</td><td>${esc(r.label)}</td><td>${r.expected ?? "-"}</td><td>${r.count}</td><td>${badge(ok)}</td></tr>`;
+          }).join("")}
         </tbody>
       </table>`;
     if (unclassified) {
