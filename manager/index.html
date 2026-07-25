@@ -263,51 +263,94 @@
 
   <!-- ── 보고서 페이지 ── -->
   <div class="page" id="page-report">
-    <div class="report-wrap">
-      <div class="report-card">
-        <h3><i class="fa-solid fa-file-lines" style="color:var(--navy)"></i> 이벤트 보고서</h3>
-        <p>검색 기간 내 이벤트 발생 및 조치 완료 내역을 엑셀 매핑.(최대 1년, 최신 100건)<br>매달 1일 전월 보고서가 센터별로 자동 생성됩니다.</p>
-        <div class="report-filters">
-          <div class="report-row">
-            <div>
-              <label>센터</label>
-              <select id="filter-center-report"></select>
-            </div>
-            <div>
-              <label>상태</label>
-              <select id="filter-status-report">
-                <option value="">전체</option>
-                <option value="발생">발생</option>
-                <option value="조치중">조치중</option>
-                <option value="완료">완료</option>
-              </select>
-            </div>
-          </div>
-          <div class="report-row">
-            <div>
-              <label>시작일</label>
-              <input type="date" id="filter-start-report">
-            </div>
-            <div>
-              <label>종료일</label>
-              <input type="date" id="filter-end-report">
-            </div>
-          </div>
-        </div>
-        <div class="report-btn-row">
-          <button class="report-map-btn" id="report-map-btn" onclick="mapEventReport()">
-            <i class="fa-solid fa-gears"></i> 매핑
-          </button>
-          <button class="report-dl-btn" id="report-dl-open-btn" onclick="openReportFileList()">
-            <i class="fa-solid fa-file-excel"></i> 파일 보기
-          </button>
-        </div>
-        <div id="report-status-msg" class="report-status-msg"></div>
+    <div class="event-toolbar" style="justify-content:flex-start">
+      <div class="sub-tabs">
+        <div class="sub-tab active" data-reporttab="event" onclick="reportSwitchSubTab('event')">이벤트</div>
+        <div class="sub-tab" data-reporttab="inspection" onclick="reportSwitchSubTab('inspection')">점검표</div>
       </div>
+    </div>
 
-      <div class="report-card" id="report-file-list-card" style="display:none">
-        <h3><i class="fa-solid fa-folder-open" style="color:var(--navy)"></i> 생성된 파일</h3>
-        <div id="report-file-list"></div>
+    <!-- 이벤트 보고서 서브페이지 -->
+    <div class="report-subpage" id="report-subpage-event" style="display:block">
+      <div class="report-wrap">
+        <div class="report-card">
+          <h3><i class="fa-solid fa-file-lines" style="color:var(--navy)"></i> 이벤트 보고서</h3>
+          <p>검색 기간 내 이벤트 발생 및 조치 완료 내역을 엑셀 매핑.(최대 1년, 최신 100건)<br>매달 1일 전월 보고서가 센터별로 자동 생성됩니다.</p>
+          <div class="report-filters">
+            <div class="report-row">
+              <div>
+                <label>센터</label>
+                <select id="filter-center-report"></select>
+              </div>
+              <div>
+                <label>상태</label>
+                <select id="filter-status-report">
+                  <option value="">전체</option>
+                  <option value="발생">발생</option>
+                  <option value="조치중">조치중</option>
+                  <option value="완료">완료</option>
+                </select>
+              </div>
+            </div>
+            <div class="report-row">
+              <div>
+                <label>시작일</label>
+                <input type="date" id="filter-start-report">
+              </div>
+              <div>
+                <label>종료일</label>
+                <input type="date" id="filter-end-report">
+              </div>
+            </div>
+          </div>
+          <div class="report-btn-row">
+            <button class="report-map-btn" id="report-map-btn" onclick="mapEventReport()">
+              <i class="fa-solid fa-gears"></i> 매핑
+            </button>
+            <button class="report-dl-btn" id="report-dl-open-btn" onclick="openReportFileList()">
+              <i class="fa-solid fa-file-excel"></i> 파일 보기
+            </button>
+          </div>
+          <div id="report-status-msg" class="report-status-msg"></div>
+        </div>
+
+        <div class="report-card" id="report-file-list-card" style="display:none">
+          <h3><i class="fa-solid fa-folder-open" style="color:var(--navy)"></i> 생성된 파일</h3>
+          <div id="report-file-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 점검표 현황 서브페이지 -->
+    <div class="report-subpage" id="report-subpage-inspection" style="display:none">
+      <div class="report-wrap">
+        <div class="report-card">
+          <h3><i class="fa-solid fa-table-list" style="color:var(--navy)"></i> 월간 점검표 현황</h3>
+          <p>선택한 달에 실제 생성된 점검표를 구분(daily/weekly/monthly)·설비별로 집계합니다.</p>
+          <div class="report-filters">
+            <div class="report-row">
+              <div>
+                <label>센터</label>
+                <select id="filter-center-report-insp"></select>
+              </div>
+              <div>
+                <label>월</label>
+                <input type="month" id="filter-month-report-insp">
+              </div>
+            </div>
+          </div>
+          <div class="report-btn-row">
+            <button class="report-map-btn" id="report-insp-load-btn" onclick="loadInspectionReport()">
+              <i class="fa-solid fa-magnifying-glass"></i> 조회
+            </button>
+          </div>
+          <div id="report-insp-status-msg" class="report-status-msg"></div>
+        </div>
+
+        <div class="report-card" id="report-insp-table-card" style="display:none">
+          <h3><i class="fa-solid fa-list-check" style="color:var(--navy)"></i> 집계 결과</h3>
+          <div id="report-insp-table"></div>
+        </div>
       </div>
     </div>
   </div>

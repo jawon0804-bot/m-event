@@ -147,7 +147,7 @@ async function buildCenterFilters() {
     eventSel.disabled = true;
   }
 
-  for (const k of ["excel","photo","report"]) {
+  for (const k of ["excel","photo","report","report-insp"]) {
     const sel = document.getElementById(`filter-center-${k}`);
     if (!isMaster) {
       sel.innerHTML = `<option value="${esc(currentUser.center_name)}">${esc(currentUser.center_name)}</option>`;
