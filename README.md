@@ -276,19 +276,27 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 
 ---
 
-## 📈 점검표 현황 (2026-07-25 추가) — 보고서 탭의 "점검표" 서브탭
+## 📈 점검표 현황 (2026-07-25 추가, 2026-07-26 재설계) — 보고서 탭의 "점검표" 서브탭
 
-> M-Engine이 자동/수동으로 생성한 점검표(`Maxerve_Excel` 컬렉션)를 센터+월 단위로 몇 번 만들어졌는지 집계해서 보여주는 화면. 이벤트 보고서와 달리 **서버(Functions/Cloud Function) 없이, 클라이언트에서 `Maxerve_Excel`을 직접 읽어서 그 자리에서 집계**해요(엑셀 탭이 이미 이렇게 하고 있던 방식과 동일).
+> M-Engine이 자동/수동으로 생성한 점검표(`Maxerve_Excel` 컬렉션)를 센터+월 단위로 "기대 횟수 대비 실제 횟수"로 집계해서 보여주는 화면. M-Engine의 월간 요약 메일(`/monthly_report`, M-Engine 레포 README "2026-07-26" 항목 참고)과 **완전히 동일한 계산 결과**를 화면에서도 바로 보여주는 게 목표. 서버(Functions/Cloud Function) 없이 클라이언트에서 Firestore를 직접 읽어서 그 자리에서 집계함.
 
 ### 무엇을 하나요?
-- 센터 + 월(`YYYY-MM`)을 고르고 **[조회]**를 누르면, 그 달에 그 센터 이름으로 생성된 `Maxerve_Excel` 문서를 전부 가져와서 `(schedule_type, sheet_label)` 조합별로 개수를 세고 표로 보여줘요.
-- 표 컬럼: 구분(daily/weekly/monthly) · 설비명(sheet_label) · **기대**(2026-07-26 추가) · **실제** · **상태**(정상/⚠️ 부족, 2026-07-26 추가)
-- 🆕 **[2026-07-26] 기대 횟수 계산 추가**: `calcExpectedCount()`(`manager/js/report-tab.js`)가 M-Engine `lib/scheduler.py`의 `calc_expected_count()`와 동일한 로직(daily=그 달 일수, monthly=1, weekly=그 달 월요일 수)을 JS로 재구현해서, 실제 개수와 비교한 상태(정상/부족)까지 한 화면에서 바로 보여줘요. 로직이 단순해서 두 언어에 따로 구현해도 어긋날 위험은 낮다고 보고 이렇게 감(M-Engine에 API를 새로 만들어 호출하는 대신).
-- 🆕 **[2026-07-26] 센터명 라벨 추가**: 근무일지 탭의 `wl-center-label`과 동일한 패턴으로, 서브탭(이벤트/점검표) 앞에 로그인한 센터명을 보여주는 라벨(`report-center-label`)을 추가했어요. Master는 "📊 전체 센터", 그 외에는 "📊 {센터명}"으로 표시(`buildCenterFilters()`에서 설정).
+- 센터 + 월(`YYYY-MM`)을 고르고 **[조회]**를 누르면, `center_configs/{center}/inspections`(그 센터에 등록된 점검표 전체 목록)을 기준으로 각 점검표의 "기대 횟수"를 계산하고, `Maxerve_Excel`에서 `facility_id`가 일치하는 문서 수를 세서 "실제 횟수"를 매칭함.
+- 표 컬럼: 구분(daily/weekly/monthly) · 설비명(sheet_label) · 기대 · 실제 · 상태(정상/⚠️ 부족)
+- **실제 생성 건수가 0건인 점검표도 목록에 그대로 나오고 "부족"으로 표시됨** — 월간 요약 메일과 동일하게, "아예 안 만들어진 것"과 "일부만 만들어진 것"을 구분 안 하고 전부 보여줌.
 
-### 데이터 출처 및 제약
-- `schedule_type`/`sheet_label`은 M-Engine이 **2026-07-25부터** `Maxerve_Excel` 문서 생성 시 같이 저장하는 필드예요(M-Engine 레포 README "2026-07-25" 항목 참고). **그 이전에 생성된 문서는 이 두 필드가 없어서 집계에서 제외**되고, 화면에 "N건은 구분/설비명 정보가 없어 집계에서 제외됨"으로 안내돼요.
-- `center_configs`(점검표 설정)를 조인하지 않아요 — `Maxerve_Excel` 문서 자체에 필요한 정보가 다 있어서 컬렉션 하나만 스캔하면 됨.
+### 🔄 2026-07-26 재설계: 왜 바꿨나
+- **처음 버전(2026-07-25)**: `Maxerve_Excel`만 스캔해서 그 안에 있는 `schedule_type`/`sheet_label` 필드로 그룹핑했음. 이 방식의 문제 두 가지가 실사용 중 발견됨:
+  1. 특정 달에 **실제 생성된 문서가 하나도 없으면** 표 자체가 통째로 비어서, "몇 건이 부족한지"를 전혀 알 수 없었음(월간 요약 메일은 매번 정상적으로 "부족 14건"처럼 보여주는데 화면은 그냥 텅 빔 — 사용자가 이 불일치를 직접 발견함).
+  2. `schedule_type`/`sheet_label` 필드가 **2026-07-25 이후 생성 문서에만 있어서**, 그 이전 문서는 집계에서 통째로 제외됐음.
+- **바뀐 방식**: `Maxerve_Excel`만 보는 대신 `center_configs/{center}/inspections`(점검표 설정 전체)를 먼저 읽어서 "이 센터엔 원래 이런 점검표들이 있다"는 전체 목록을 만들고, 각 점검표의 `facility_id`로 `Maxerve_Excel`을 매칭해 실제 개수를 셈. `facility_id`는 2026-07-25 이전 문서에도 항상 있던 필드라서, **옛날 문서도 자동으로 집계에 포함**되고(백필 불필요), 실제 문서가 0건이어도 점검표 자체는 목록에 나오니 월간 메일과 정확히 같은 결과가 나옴.
+- `calcExpectedCount()`(`manager/js/report-tab.js`)는 M-Engine `lib/scheduler.py`의 `calc_expected_count()`와 동일한 로직(daily=그 달 일수, monthly=1, weekly=그 달 월요일 수)을 JS로 재구현한 것 — 계산 로직 자체가 단순해서 두 언어에 따로 구현해도 어긋날 위험은 낮다고 보고 이렇게 감(M-Engine에 API를 새로 만들어 호출하는 대신).
+- 🆕 **센터명 라벨 추가**: 근무일지 탭의 `wl-center-label`과 동일한 패턴으로, 서브탭(이벤트/점검표) 앞에 로그인한 센터명을 보여주는 라벨(`report-center-label`)을 추가했어요. Master는 "📊 전체 센터", 그 외에는 "📊 {센터명}"으로 표시(`buildCenterFilters()`에서 설정).
+
+### 데이터 출처
+- `center_configs/{center}/inspections`: 점검표 목록(schedule_type, sheet_label, fids, active) — "기대 횟수" 계산 기준
+- `Maxerve_Excel`: `center_name` + `datetime` 범위로 조회 후 `facility_id`별로 개수 집계 — "실제 횟수"
+- `schedule_type`/`sheet_label` 필드(M-Engine이 2026-07-25부터 `Maxerve_Excel`에 같이 저장)는 **이 화면에서는 더 이상 안 씀** — `facility_id` 매칭만으로 충분해서 예전 문서 호환을 위해 남겨둔 셈. (m-event 자체 다른 화면에서 쓸 수도 있으니 필드 자체는 계속 유지)
 
 ### 관련 파일
 | 파일 | 역할 |
@@ -297,7 +305,8 @@ fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
 | `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트 및 `report-center-label` 채움 |
 
 ### 트러블슈팅 메모
-- 조회했는데 표가 비어있으면 → 그 달에 그 센터 이름으로 생성된 문서가 아예 없거나(정상), 전부 2026-07-25 이전 생성분이라 필드가 없어서 집계 대상에서 빠진 것(정상, 위 "제외됨" 안내 문구 확인)
+- 조회했는데 "이 센터에 등록된 점검표가 없습니다"가 나오면 → `center_configs/{center}/inspections` 자체가 비어있는 것(설정 문제, Firestore 콘솔에서 확인)
+- 전부 "부족"으로만 나와도 정상일 수 있음 — 그 달에 실제로 자동 생성이 안 됐으면(예: 스케줄러 버그가 있었던 달) 월간 메일과 동일하게 전부 부족으로 나오는 게 맞는 결과임
 - `center_name` + `datetime` 범위 쿼리라 Firestore 복합 색인이 필요할 수 있어요 — 엑셀 탭이 쓰는 것과 같은 컬렉션/필드 패턴이라 이미 색인이 있을 가능성이 높지만, 처음 실행 시 에러가 나면 에러 메시지의 색인 생성 링크를 따라가면 돼요
 
 ---

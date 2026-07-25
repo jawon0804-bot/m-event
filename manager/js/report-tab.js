@@ -37,9 +37,12 @@ function calcExpectedCount(scheduleType, year, month) {
 }
 
 // ──────────────────────────────────────────────
-// 점검표 현황: Maxerve_Excel을 schedule_type/sheet_label 기준으로 월별 집계
-// (center_configs 조인 없이 Maxerve_Excel 하나만 스캔 — 두 필드는 2026-07-25
-//  배포 이후 생성된 문서부터 존재하므로, 그 이전 문서는 집계에서 빠짐)
+// 점검표 현황: center_configs/{center}/inspections(점검표 전체 목록) 기준으로
+// 기대 횟수를 계산하고, Maxerve_Excel(facility_id 매칭)에서 실제 횟수를 세서
+// 합침 — M-Engine의 월간 요약 메일(run_monthly_report)과 동일한 방식.
+// facility_id는 2026-07-25 이전 문서에도 항상 있던 필드라, schedule_type/
+// sheet_label이 없는 옛날 문서도 그대로 집계에 포함됨(별도 백필 불필요).
+// 실제 생성 건수가 0인 점검표도 "기대 대비 부족"으로 표시됨(메일과 동일).
 // ──────────────────────────────────────────────
 function setInspReportMsg(text, type) {
   const el = document.getElementById("report-insp-status-msg");
@@ -62,57 +65,60 @@ async function loadInspectionReport() {
   setInspReportMsg("");
   card.style.display = "none";
   try {
+    const [year, monthNum] = month.split("-").map(Number);
+    const inspectionsSnap = await db.collection("center_configs").doc(center).collection("inspections").get();
+    if (inspectionsSnap.empty) {
+      card.style.display = "block";
+      tableEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>이 센터에 등록된 점검표가 없습니다.</p></div>`;
+      return;
+    }
     const snap = await db.collection("Maxerve_Excel")
       .where("center_name", "==", center)
       .where("datetime", ">=", month + "-01")
       .where("datetime", "<=", month + "-31\uffff")
       .get();
 
-    if (snap.empty) {
-      card.style.display = "block";
-      tableEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>해당 월에 생성된 점검표가 없습니다.</p></div>`;
-      return;
-    }
-
-    // (구분, 설비명) 조합별로 개수 집계
-    const groups = {};
-    let unclassified = 0;
+    // facility_id(합쳐진 문자열) 기준으로 실제 생성 건수 집계
+    const actualByFid = {};
     snap.forEach(doc => {
-      const d = doc.data();
-      const stype = d.schedule_type || "";
-      const label = d.sheet_label || "";
-      if (!stype || !label) { unclassified++; return; }
-      const key = `${stype}|||${label}`;
-      groups[key] = (groups[key] || 0) + 1;
+      const fid = doc.data().facility_id || "";
+      actualByFid[fid] = (actualByFid[fid] || 0) + 1;
     });
 
-    const [year, monthNum] = month.split("-").map(Number);
     const typeOrder = { daily: 0, weekly: 1, monthly: 2 };
-    const rows = Object.entries(groups)
-      .map(([key, count]) => {
-        const [stype, label] = key.split("|||");
-        const expected = calcExpectedCount(stype, year, monthNum);
-        return { stype, label, count, expected };
-      })
-      .sort((a, b) => (typeOrder[a.stype] ?? 9) - (typeOrder[b.stype] ?? 9) || a.label.localeCompare(b.label));
+    const rows = [];
+    inspectionsSnap.forEach(doc => {
+      const insp = doc.data();
+      if (insp.active === false) return;
+      const stype = insp.schedule_type || "";
+      const expected = calcExpectedCount(stype, year, monthNum);
+      if (expected === null) return; // daily/weekly/monthly 외 타입은 집계 대상 아님
+      const label = insp.sheet_label || insp.func_key || doc.id;
+      const fidStr = (Array.isArray(insp.fids) ? insp.fids : []).join(",");
+      rows.push({ stype, label, count: actualByFid[fidStr] || 0, expected });
+    });
+    rows.sort((a, b) => (typeOrder[a.stype] ?? 9) - (typeOrder[b.stype] ?? 9) || a.label.localeCompare(b.label));
+
+    if (rows.length === 0) {
+      card.style.display = "block";
+      tableEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>daily/weekly/monthly 점검표가 없습니다.</p></div>`;
+      return;
+    }
 
     const badge = (ok) => ok
       ? `<span style="background:#dcfce7;color:#15803d;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap">정상</span>`
       : `<span style="background:#fee2e2;color:#dc2626;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap">⚠️ 부족</span>`;
 
-    let html = `
+    const html = `
       <table class="insp-report-table">
         <thead><tr><th>구분</th><th>설비명</th><th>기대</th><th>실제</th><th>상태</th></tr></thead>
         <tbody>
           ${rows.map(r => {
-            const ok = r.expected === null ? true : r.count >= r.expected;
-            return `<tr><td>${esc(r.stype)}</td><td>${esc(r.label)}</td><td>${r.expected ?? "-"}</td><td>${r.count}</td><td>${badge(ok)}</td></tr>`;
+            const ok = r.count >= r.expected;
+            return `<tr><td>${esc(r.stype)}</td><td>${esc(r.label)}</td><td>${r.expected}</td><td>${r.count}</td><td>${badge(ok)}</td></tr>`;
           }).join("")}
         </tbody>
       </table>`;
-    if (unclassified) {
-      html += `<div style="margin-top:8px;font-size:12px;color:var(--gray4)">⚠️ ${unclassified}건은 2026-07-25 이전 생성분이라 구분/설비명 정보가 없어 집계에서 제외됨</div>`;
-    }
     card.style.display = "block";
     tableEl.innerHTML = html;
   } catch (e) {
