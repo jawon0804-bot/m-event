@@ -71,6 +71,7 @@ function aggregateAttendance(ws, targetDay) {
 
   const counts = { day: 0, night: 0, off: 0, rest: 0, edu: 0, sick: 0, annual: 0, compoff: 0 };
   const names  = { day: [], night: [], offList: [] }; // offList: 비/휴/교/연/휴가/대휴/오/병 통합 ("이름(코드)")
+  let cnt_total = 0; // 총원 = 성명 있는 행 수(그날 코드 유무·인식 여부와 무관 — 재적인원 자체를 셈)
 
   const dataStartRow = header.row + 2; // 헤더 다음 줄(요일 행)은 건너뜀
   for (let r = dataStartRow; r <= dataStartRow + ATTENDANCE_MAX_DATA_ROWS; r++) {
@@ -82,6 +83,7 @@ function aggregateAttendance(ws, targetDay) {
 
     const name = String(row.getCell(header.col).value ?? "").trim();
     if (!name) continue;
+    cnt_total++;
 
     const code = String(row.getCell(dateCol).value ?? "").trim();
     if (!code) continue;
@@ -98,7 +100,8 @@ function aggregateAttendance(ws, targetDay) {
   }
 
   return {
-    cnt_attend: counts.day + counts.night, // VBA 원본과 동일하게 출근자만 자동 계산 (총원은 수기 유지)
+    cnt_total,
+    cnt_attend: counts.day + counts.night,
     cnt_day: counts.day, cnt_night: counts.night,
     cnt_off: counts.off, cnt_rest: counts.rest,
     cnt_annual: counts.annual, cnt_compoff: counts.compoff,
