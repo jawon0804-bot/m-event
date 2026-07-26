@@ -479,6 +479,28 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-line-btn.wl-del { color: #c0392b; border-color: #f3c6c6; }
 .wl-line-btn.wl-del:hover { background: #fdecea; }
 
+/* ── 근무일지: 이전 근무일 불러오기 ── */
+.wl-date-nav { display: flex; align-items: center; gap: 6px; }
+.wl-date-nav input[type="date"] {
+  border: 1px solid var(--gray2); border-radius: 6px; padding: 6px 10px;
+  font-size: 13px; outline: none; background: var(--gray0); color: var(--text);
+}
+.wl-date-nav input[type="date"]:focus { border-color: var(--navy2); }
+.wl-date-nav .search-btn { padding: 6px 14px; font-size: 13px; }
+.wl-back-today-btn { background: var(--gray4); }
+.wl-back-today-btn:hover { background: var(--gray5); }
+.wl-past-banner {
+  margin: 0 24px 10px; padding: 7px 14px; border-radius: 6px;
+  background: #fff7ed; border: 1px solid #fdba74; color: #9a3412;
+  font-size: 12.5px; font-weight: 600;
+}
+.wl-export-status {
+  margin: 0 24px 10px; padding: 7px 14px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 600;
+}
+.wl-export-status.success { background: #ecfdf3; color: #15803d; }
+.wl-export-status.error   { background: #fef2f2; color: #dc2626; }
+
 /* ── 근무일지: 월별 점검표 다운로드 박스 ── */
 /* ── 근무일지: 월별 점검표 다운로드 박스 (좌측 사이드바, 3열) ── */
 .wl-month-panel {

@@ -130,10 +130,17 @@
         </div>
         <span id="wl-today-str" style="font-weight:400;font-size:13px;color:var(--gray4)"></span>
       </div>
-      <button class="search-btn" onclick="wlSaveBaseInfo()" id="wl-save-btn">
-        <i class="fa-solid fa-floppy-disk"></i> 기본정보 저장(인원현황/서명/날씨)
-      </button>
+      <div class="wl-date-nav">
+        <input type="date" id="wl-view-date">
+        <button class="search-btn" onclick="wlLoadDate()">불러오기</button>
+        <button class="search-btn wl-back-today-btn" id="wl-back-today-btn" style="display:none" onclick="wlBackToToday()">돌아가기</button>
+        <button class="search-btn" id="wl-export-btn" style="display:none" onclick="wlExportNow()">
+          <i class="fa-solid fa-file-excel"></i> 엑셀 반영
+        </button>
+      </div>
     </div>
+    <div id="wl-past-banner" class="wl-past-banner" style="display:none"></div>
+    <div id="wl-export-status" class="wl-export-status" style="display:none"></div>
 
     <!-- 근무일지 서브페이지 -->
     <div class="wl-subpage" id="wl-subpage-diary" style="display:flex;gap:16px;padding:16px 24px;align-items:flex-start">
@@ -155,7 +162,7 @@
 <tr><td rowspan="2" colspan="9" class="cell-lbl cell-title"><span id="wl-title-text">시설 업무일지</span></td><td class="cell-blank"></td><td class="cell-lbl cell-sighead cell-yellow"><span>담  당</span></td><td class="cell-lbl cell-sighead cell-yellow"><span>과  장</span></td><td class="cell-lbl cell-sighead cell-yellow"><span>팀  장</span></td></tr>
 <tr><td class="cell-blank"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_staff"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_manager"></td><td rowspan="2" class="cell-input cell-sigbox"><input type="text" id="sig_teamlead"></td></tr>
 <tr><td colspan="9" class="cell-spacer"></td><td class="cell-blank"></td></tr>
-<tr class="row-noborder"><td colspan="2" class="cell-input"><input type="date" id="date_input"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input wl-left"><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
+<tr class="row-noborder"><td colspan="2" class="cell-input wl-locked"><input type="date" id="date_input" disabled title="이 문서의 근무일로 자동 고정됩니다"></td><td class="cell-lbl cell-label-right"><span>날 씨 :</span></td><td colspan="9" class="cell-input wl-left"><input type="text" id="weather_input" placeholder="맑음 / 흐림 / 비 / 눈 등"></td><td class="cell-blank"></td></tr>
 <tr><td rowspan="4" class="cell-lbl cell-section-v vertical"><span>인 력 현 황</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>총 원</span></td><td colspan="2" class="cell-lbl cell-yellow"><span>출 근 자</span></td><td class="cell-lbl cell-yellow"><span>주 간</span></td><td class="cell-lbl cell-yellow"><span>야 간</span></td><td class="cell-lbl cell-yellow"><span>비 번</span></td><td class="cell-lbl cell-yellow"><span>휴 무</span></td><td class="cell-lbl cell-yellow"><span>연 차</span></td><td class="cell-lbl cell-yellow"><span>대휴</span></td><td class="cell-lbl cell-yellow"><span>교육</span></td><td class="cell-lbl cell-yellow"><span>병가</span></td></tr>
 <tr><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_total" value="5"></td><td colspan="2" class="cell-input "><input type="number" step="1" id="cnt_attend"></td><td class="cell-input "><input type="number" step="1" id="cnt_day"></td><td class="cell-input "><input type="number" step="1" id="cnt_night"></td><td class="cell-input "><input type="number" step="1" id="cnt_off"></td><td class="cell-input "><input type="number" step="1" id="cnt_rest"></td><td class="cell-input "><input type="number" step="1" id="cnt_annual"></td><td class="cell-input "><input type="number" step="1" id="cnt_compoff"></td><td class="cell-input "><input type="number" step="1" id="cnt_edu"></td><td class="cell-input "><input type="number" step="1" id="cnt_sick"></td></tr>
 <tr><td colspan="4" class="cell-lbl "><span>주간 근무자</span></td><td colspan="4" class="cell-lbl "><span>야간 근무자</span></td><td colspan="4" class="cell-lbl "><span>비번/휴무/교육</span></td></tr>

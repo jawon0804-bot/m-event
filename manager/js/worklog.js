@@ -23,7 +23,7 @@ const WL_SECTIONS = {
 };
 
 const WL_SINGLE_FIELDS = [
-  "sig_staff","sig_manager","sig_teamlead","date_input","weather_input",
+  "sig_staff","sig_manager","sig_teamlead","weather_input",
   "cnt_total","cnt_attend","cnt_day","cnt_night","cnt_off","cnt_rest","cnt_annual","cnt_compoff","cnt_edu","cnt_sick",
   "names_day","names_night","names_off",
   "util_water_name","util_water_prev","util_water_today","util_water_usage","util_water_cum","util_water_month",
@@ -39,6 +39,8 @@ let wlState = { dayWork: [], dayCheck: [], nightWork: [], nightNote: [], legal: 
 let wlBaseDocRef = null;
 let wlBaseSynced = {};       // 필드별 "마지막으로 Firestore와 동기화 확인된 값" — 변경분만 저장하기 위한 기준
 let wlBaseFieldsBound = false; // 단일필드 blur 자동저장 리스너 중복 바인딩 방지
+let wlIsPastMode = false;           // true면 오늘이 아닌(이번 달 과거) 근무일을 보고 있는 중
+let wlPastConfirmedThisSession = false; // 과거 근무일 진입 후 "엑셀도 다시 생성됨" 확인을 이미 받았는지
 
 // 09:00 기준 근무일 계산 (백엔드 workLogDailyExport와 동일 로직 — 09:00 이전이면 전날로 취급)
 // ※ 기존에는 toLocaleString() 문자열을 다시 Date로 파싱했는데, 이 포맷은 브라우저/OS 로캘에 따라
@@ -73,15 +75,20 @@ function wlInit() {
     : currentUser.center_name;
   if (!wlCenter) return;
   wlWorkday = wlGetWorkday(new Date());
-  const el = document.getElementById("wl-today-str");
-  if (el) el.textContent = `(${wlWorkday} 근무일)`;
+  wlIsPastMode = false;
+  wlPastConfirmedThisSession = false;
   const titleEl = document.getElementById("wl-title-text");
   if (titleEl) titleEl.textContent = `${wlCenter} ${WL_TITLE_SUFFIX}`;
   const centerLabelEl = document.getElementById("wl-center-label");
   if (centerLabelEl) centerLabelEl.textContent = `📓 ${wlCenter}`;
-  // 날짜 입력칸 기본값 = 오늘 근무일 (Firestore에 저장된 값이 있으면 onSnapshot이 곧 덮어씀)
-  const dateEl = document.getElementById("date_input");
-  if (dateEl && !dateEl.value) dateEl.value = wlWorkday;
+  // 이전 근무일 불러오기 칸 — 이번 달 1일 ~ 오늘까지만 선택 가능
+  const viewDateEl = document.getElementById("wl-view-date");
+  if (viewDateEl) {
+    viewDateEl.min = `${wlWorkday.slice(0, 7)}-01`;
+    viewDateEl.max = wlWorkday;
+    viewDateEl.value = wlWorkday;
+  }
+  wlUpdatePastModeUI();
   wlSubscribe();
   wlInitMonthPanel();
   wlAttendanceLoaded = null; // 센터 전환 시 출근부 미리보기 캐시 무효화 (다음에 탭 열면 새로 로드)
@@ -98,9 +105,100 @@ function wlSwitchSubTab(tab) {
   const attEl   = document.getElementById("wl-subpage-attendance");
   if (diaryEl) diaryEl.style.display = tab === "diary" ? "flex" : "none";
   if (attEl)   attEl.style.display   = tab === "attendance" ? "block" : "none";
-  const saveBtn = document.getElementById("wl-save-btn");
-  if (saveBtn) saveBtn.style.display = tab === "diary" ? "" : "none";
+  const dateNavEl = document.querySelector(".wl-date-nav");
+  if (dateNavEl) dateNavEl.style.display = tab === "diary" ? "" : "none";
+  const bannerEl = document.getElementById("wl-past-banner");
+  if (bannerEl) bannerEl.style.display = (tab === "diary" && wlIsPastMode) ? "block" : "none";
+  const exportStatusEl = document.getElementById("wl-export-status");
+  if (exportStatusEl && tab !== "diary") exportStatusEl.style.display = "none";
   if (tab === "attendance") wlLoadAttendancePreview();
+}
+
+// ──────────────────────────────────────────────
+// 이전 근무일 불러오기 (이번 달 범위 내에서만) / 오늘로 복귀
+// ──────────────────────────────────────────────
+function wlLoadDate() {
+  const el = document.getElementById("wl-view-date");
+  if (!el || !el.value) return;
+  const todayWorkday = wlGetWorkday(new Date());
+  const monthStart = `${todayWorkday.slice(0, 7)}-01`;
+  if (el.value < monthStart || el.value > todayWorkday) {
+    alert(`이번 달(${monthStart} ~ ${todayWorkday}) 근무일만 불러올 수 있습니다.`);
+    el.value = wlWorkday;
+    return;
+  }
+  wlWorkday = el.value;
+  wlIsPastMode = wlWorkday !== todayWorkday;
+  wlPastConfirmedThisSession = false; // 다른 날짜로 다시 불러오면 확인 상태 초기화
+  wlUpdatePastModeUI();
+  wlSubscribe();
+}
+
+function wlBackToToday() {
+  wlWorkday = wlGetWorkday(new Date());
+  wlIsPastMode = false;
+  wlPastConfirmedThisSession = false;
+  const el = document.getElementById("wl-view-date");
+  if (el) el.value = wlWorkday;
+  wlUpdatePastModeUI();
+  wlSubscribe();
+}
+
+// 과거 근무일 모드에 따라 배너/버튼 라벨/오늘로 버튼 표시를 갱신
+function wlUpdatePastModeUI() {
+  // 서식에 인쇄되는 날짜 칸(날씨 옆) — 지금 보고 있는 문서의 근무일로 항상 고정. 수동 입력 아님(disabled).
+  const sheetDateEl = document.getElementById("date_input");
+  if (sheetDateEl) sheetDateEl.value = wlWorkday;
+  const todayStrEl = document.getElementById("wl-today-str");
+  if (todayStrEl) todayStrEl.textContent = `(${wlWorkday} 근무일)`;
+  const bannerEl = document.getElementById("wl-past-banner");
+  if (bannerEl) {
+    bannerEl.style.display = wlIsPastMode ? "block" : "none";
+    if (wlIsPastMode) bannerEl.textContent = `${wlWorkday} 근무일지`;
+  }
+  const backBtn = document.getElementById("wl-back-today-btn");
+  if (backBtn) backBtn.style.display = wlIsPastMode ? "" : "none";
+  const exportBtn = document.getElementById("wl-export-btn");
+  if (exportBtn) exportBtn.style.display = wlIsPastMode ? "" : "none";
+  setWlExportStatus(""); // 날짜 전환 시 이전 날짜의 반영 결과 메시지는 지움
+}
+
+// "엑셀 반영" 버튼 — 수정 다 끝난 뒤 원할 때 눌러서 그 날짜 엑셀 시트만 재생성(Callable)
+function setWlExportStatus(text, type) {
+  const el = document.getElementById("wl-export-status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.style.display = text ? "block" : "none";
+  el.className = "wl-export-status" + (type ? ` ${type}` : "");
+}
+
+async function wlExportNow() {
+  if (!wlIsPastMode || !wlCenter || !wlWorkday) return;
+  const btn = document.getElementById("wl-export-btn");
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 반영 중...`;
+  setWlExportStatus("");
+  try {
+    const call = functions.httpsCallable("workLogManualExport");
+    await call({ center: wlCenter, workday: wlWorkday });
+    setWlExportStatus(`✅ ${wlWorkday} 근무일 엑셀에 반영되었습니다.`, "success");
+  } catch (e) {
+    console.error("[근무일지] 엑셀 반영 실패:", e);
+    setWlExportStatus((e.message || "").replace(/^[a-z-]+:\s*/i, "") || "반영 중 오류가 발생했습니다.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
+
+// 과거 근무일을 처음 건드리는 순간 딱 한 번만 확인받음 (세션 동안 재사용)
+function wlConfirmPastEditOnce() {
+  if (!wlIsPastMode) return true;
+  if (wlPastConfirmedThisSession) return true;
+  const ok = confirm(`${wlWorkday} 근무일지 수정 시 엑셀도 다시 생성됩니다.\n계속할까요?`);
+  if (ok) wlPastConfirmedThisSession = true;
+  return ok;
 }
 
 // ──────────────────────────────────────────────
@@ -165,16 +263,34 @@ function wlSubscribe() {
       const inp = document.getElementById(fid);
       const val = data[fid] !== undefined ? data[fid] : "";
       wlBaseSynced[fid] = val; // 다른 컴퓨터가 쓴 값을 "동기화된 기준값"으로 항상 갱신
-      if (inp && data[fid] !== undefined && document.activeElement !== inp) inp.value = data[fid];
+      // 필드 값이 없어도(undefined) 반드시 비워야 함 — 안 그러면 날짜를 바꿨을 때 이전 문서의
+      // 값이 입력칸에 그대로 남아있음(새로고침 없이 문서를 바꾸는 이번 기능 때문에 드러난 문제)
+      if (inp && document.activeElement !== inp) inp.value = val;
     }
   }, e => console.error("[근무일지] 기본정보 구독 오류:", e)));
   wlBindBaseFieldAutosave();
 
   // 줄 단위 섹션 6개 구독
+  // ※ Firestore의 orderBy("order")는 order 필드가 없는 문서를 결과에서 조용히 빼버림 —
+  //   "줄 삭제/재정렬" 기능(order 필드 도입) 이전에 작성된 옛날 문서가 이 때문에 안 보이는
+  //   버그가 있었음. orderBy 없이 전부 받아온 뒤 프런트에서 정렬(order 없으면 맨 뒤,
+  //   그런 문서끼리는 작성 시각 순)하는 방식으로 변경.
   for (const key of Object.keys(WL_SECTIONS)) {
     const sub = WL_SECTIONS[key].sub;
-    const unsub = wlBaseDocRef.collection(sub).orderBy("order","asc").onSnapshot(snap => {
-      wlState[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const unsub = wlBaseDocRef.collection(sub).onSnapshot(snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // order 없는(재정렬 기능 이전) 문서는 -Infinity로 취급해 항상 먼저 오게 함 — 시간상으로도
+      // order 필드가 생기기 전에 작성된 게 맞고, wlNextOrder가 새 줄에 0부터 매기므로 이렇게 해야
+      // "기존 줄 뒤에 새 줄 추가"가 실제로도 뒤에 붙어 보임(반대로 하면 새 줄이 위로 튀어오름)
+      docs.sort((a, b) => {
+        const oa = typeof a.order === "number" ? a.order : -Infinity;
+        const ob = typeof b.order === "number" ? b.order : -Infinity;
+        if (oa !== ob) return oa - ob;
+        const ta = a.created_at?.toMillis ? a.created_at.toMillis() : 0;
+        const tb = b.created_at?.toMillis ? b.created_at.toMillis() : 0;
+        return ta - tb;
+      });
+      wlState[key] = docs;
       wlRenderSection(key);
     }, e => console.error(`[근무일지] ${key} 구독 오류:`, e));
     wlUnsubs.push(unsub);
@@ -279,6 +395,7 @@ async function wlDeleteLine(key, idx) {
   const meta = WL_SECTIONS[key];
   const entry = wlState[key][idx];
   if (!entry) return;
+  if (!wlConfirmPastEditOnce()) return;
   if (!confirm("이 줄을 삭제하시겠습니까?")) return;
   try {
     await wlBaseDocRef.collection(meta.sub).doc(entry.id).delete();
@@ -295,6 +412,7 @@ async function wlMoveLine(key, idx, dir) {
   const otherIdx = idx + dir;
   const a = entries[idx], b = entries[otherIdx];
   if (!a || !b) return;
+  if (!wlConfirmPastEditOnce()) return;
   const sub = wlBaseDocRef.collection(meta.sub);
   const aRef = sub.doc(a.id), bRef = sub.doc(b.id);
   try {
@@ -317,6 +435,7 @@ function wlRenderSection(key) {
 // 심플 섹션 한 줄 저장 (새 줄 추가 or 기존 줄 수정)
 async function wlSaveLine(key, idx, value) {
   if (!value || !value.trim()) return;
+  if (!wlConfirmPastEditOnce()) return;
   const meta = WL_SECTIONS[key];
   const entries = wlState[key];
   const sub = wlBaseDocRef.collection(meta.sub);
@@ -356,6 +475,7 @@ async function wlSaveMultiLine(key, idx, rowFids) {
     if (payload[subKey]) hasValue = true;
   }
   if (!hasValue) return;
+  if (!wlConfirmPastEditOnce()) return;
   try {
     if (entries[idx]) {
       await sub.doc(entries[idx].id).update({
@@ -397,6 +517,7 @@ function wlBindBaseFieldAutosave() {
 async function wlSaveBaseField(fid, value) {
   if (!wlBaseDocRef) return;
   if (wlBaseSynced[fid] === value) return; // 변경 없음 → 불필요한 쓰기 스킵
+  if (!wlConfirmPastEditOnce()) return;
   try {
     await wlBaseDocRef.set({
       [fid]: value,
@@ -407,34 +528,6 @@ async function wlSaveBaseField(fid, value) {
     wlBaseSynced[fid] = value; // 낙관적 갱신 (곧 onSnapshot으로 재확정됨)
   } catch (e) {
     console.error(`[근무일지] ${fid} 저장 실패:`, e);
-    alert("저장 중 오류가 발생했습니다.");
-  }
-}
-
-// 기본정보 "저장" 버튼 — blur를 안 거치고 남아있는 변경분(예: Enter로 넘어간 필드)을 한 번에 반영.
-// ※ 반드시 wlBaseSynced와 다른(=실제로 바뀐) 필드만 payload에 담아, 다른 컴퓨터가 쓴 값을
-//   덮어쓰지 않도록 함.
-async function wlSaveBaseInfo() {
-  if (!wlBaseDocRef) return;
-  const payload = {};
-  let hasChange = false;
-  for (const fid of WL_SINGLE_FIELDS) {
-    const inp = document.getElementById(fid);
-    if (!inp) continue;
-    if (wlBaseSynced[fid] !== inp.value) { payload[fid] = inp.value; hasChange = true; }
-  }
-  if (!hasChange) { alert("변경된 내용이 없습니다."); return; }
-  payload.center_name = wlCenter;
-  payload.workday = wlWorkday;
-  payload.updated_at = firebase.firestore.FieldValue.serverTimestamp();
-  try {
-    await wlBaseDocRef.set(payload, { merge: true });
-    for (const fid of WL_SINGLE_FIELDS) {
-      if (fid in payload) wlBaseSynced[fid] = payload[fid];
-    }
-    alert("기본정보가 저장되었습니다.");
-  } catch (e) {
-    console.error("[근무일지] 기본정보 저장 실패:", e);
     alert("저장 중 오류가 발생했습니다.");
   }
 }

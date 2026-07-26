@@ -1,6 +1,7 @@
 // lib/worklog-export.js
 // 근무일지(work_logs) → 센터별 월별 엑셀 파일로 매일 내보내기
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const ExcelJS = require("exceljs");
 const { db, bucket } = require("./firebase");
 const { WORKLOG_TEMPLATE_SHEET, WORKLOG_LAYOUT } = require("../config/constants");
@@ -18,7 +19,7 @@ function wlSetValue(ws, range, value) {
 // work_logs 데이터를 (템플릿에서 복제된) 워크시트의 정해진 좌표에만 값으로 채워 넣음
 // ※ 라벨 텍스트/병합/테두리는 templates/{center}/work_log.xlsx 의 "양식" 시트를 그대로 복제해서
 //   이미 존재하므로 여기서는 절대 새로 만들지 않음 (cloneTemplateSheet 참고)
-function fillWorkLogValues(ws, payload, center) {
+function fillWorkLogValues(ws, payload, center, workday) {
   const L = WORKLOG_LAYOUT;
   const base = payload.base || {};
 
@@ -29,8 +30,10 @@ function fillWorkLogValues(ws, payload, center) {
   wlSetValue(ws, L.sign.manager, base.sig_manager || "");
   wlSetValue(ws, L.sign.teamlead, base.sig_teamlead || "");
 
-  const dateCell = wlSetValue(ws, L.date, base.date_input || "");
-  if (dateCell && base.date_input) dateCell.numFmt = "yyyy-mm-dd";
+  // 날짜 칸은 더 이상 프런트에서 수동 입력받지 않고, 이 문서의 근무일(workday)을 그대로 씀
+  // (예전엔 base.date_input이라는 별도 텍스트 필드였는데, 실제 문서 근무일과 어긋날 수 있어 제거함)
+  const dateCell = wlSetValue(ws, L.date, workday);
+  if (dateCell) dateCell.numFmt = "yyyy-mm-dd";
   wlSetValue(ws, L.weather, base.weather_input || "");
 
   wlSetValue(ws, L.personnel.total, base.cnt_total || "");
@@ -149,6 +152,62 @@ function cloneTemplateSheet(targetWorkbook, tplSheet, sheetName) {
 }
 
 // ==============================================================================
+// 센터 한 곳 + 근무일 하루치를 work_logs에서 읽어 그 달 엑셀 파일의 해당 날짜
+// 시트만 갱신(덮어쓰기)한다. workLogDailyExport(매일 09:00 스케줄)와, 과거 근무일이
+// 수정됐을 때 즉시 재생성하는 트리거(아래 workLogOnBaseWrite/workLogOnLineWrite)가
+// 공통으로 사용하는 핵심 로직.
+// ==============================================================================
+async function exportWorkLogDay(center, workday) {
+  const [wy, wm, wd] = workday.split("-").map(n => parseInt(n, 10));
+  const docId = `${center}_${workday}`;
+
+  const baseSnap = await db.collection("work_logs").doc(docId).get();
+  if (!baseSnap.exists) {
+    console.log(`[근무일지 내보내기] ${docId} 문서 없음(작성 내역 없음), 스킵`);
+    return { ok: false, reason: "no-doc" };
+  }
+
+  const payload = { base: baseSnap.data() };
+  for (const sub of ["dayWork", "dayCheck", "nightWork", "nightNote", "legal", "material"]) {
+    const subSnap = await db.collection("work_logs").doc(docId).collection(sub)
+      .orderBy("order", "asc").get();
+    payload[sub] = subSnap.docs.map(d => d.data());
+  }
+
+  // 센터별 원본 양식 템플릿 로드 (없으면 스킵)
+  const tplSheet = await loadWorkLogTemplate(center);
+  if (!tplSheet) {
+    console.error(`[근무일지 내보내기] ${center} 템플릿 없어 스킵 (templates/${center}/work_log.xlsx 확인 필요)`);
+    return { ok: false, reason: "no-template" };
+  }
+
+  const fileName = `${wy}년_${wm}월_점검표.xlsx`;
+  const filePath = `work_log/${center}/${fileName}`;
+  const file = bucket.file(filePath);
+
+  const workbook = new ExcelJS.Workbook();
+  const [exists] = await file.exists();
+  if (exists) {
+    const buf = await file.download();
+    await workbook.xlsx.load(buf[0]);
+  }
+
+  const sheetName = `${wd}일`;
+  const existingSheet = workbook.getWorksheet(sheetName);
+  if (existingSheet) workbook.removeWorksheet(existingSheet.id); // 같은 날짜 재실행 시 덮어쓰기
+
+  const ws = cloneTemplateSheet(workbook, tplSheet, sheetName); // 템플릿을 새 날짜 시트로 복제
+  fillWorkLogValues(ws, payload, center, workday);              // 정해진 좌표에 값만 채움
+
+  const outBuf = await workbook.xlsx.writeBuffer();
+  await file.save(outBuf, {
+    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  console.log(`[근무일지 내보내기] ${filePath} / 시트 "${sheetName}" 완료`);
+  return { ok: true };
+}
+
+// ==============================================================================
 // [스케줄 2] 근무일지 → 엑셀 변환 (매일 09:00 Asia/Seoul)
 // 이 스케줄러가 도는 정각(09:00)에 "방금 막 끝난 근무일"은 항상 어제 날짜
 // (근무일 정의: 어제 09:00 ~ 오늘 09:00 = "어제" 근무일)
@@ -175,50 +234,7 @@ exports.workLogDailyExport = onSchedule(
 
     for (const center of centers) {
       try {
-        const docId = `${center}_${workday}`;
-        const baseSnap = await db.collection("work_logs").doc(docId).get();
-        if (!baseSnap.exists) {
-          console.log(`[근무일지 내보내기] ${docId} 문서 없음(작성 내역 없음), 스킵`);
-          continue;
-        }
-
-        const payload = { base: baseSnap.data() };
-        for (const sub of ["dayWork", "dayCheck", "nightWork", "nightNote", "legal", "material"]) {
-          const subSnap = await db.collection("work_logs").doc(docId).collection(sub)
-            .orderBy("order", "asc").get();
-          payload[sub] = subSnap.docs.map(d => d.data());
-        }
-
-        // 센터별 원본 양식 템플릿 로드 (없으면 이 센터는 스킵 — 다른 센터는 계속 진행)
-        const tplSheet = await loadWorkLogTemplate(center);
-        if (!tplSheet) {
-          console.error(`[근무일지 내보내기] ${center} 템플릿 없어 스킵 (templates/${center}/work_log.xlsx 확인 필요)`);
-          continue;
-        }
-
-        const fileName = `${wy}년_${wm}월_점검표.xlsx`;
-        const filePath = `work_log/${center}/${fileName}`;
-        const file = bucket.file(filePath);
-
-        const workbook = new ExcelJS.Workbook();
-        const [exists] = await file.exists();
-        if (exists) {
-          const buf = await file.download();
-          await workbook.xlsx.load(buf[0]);
-        }
-
-        const sheetName = `${wd}일`;
-        const existingSheet = workbook.getWorksheet(sheetName);
-        if (existingSheet) workbook.removeWorksheet(existingSheet.id); // 같은 날짜 재실행 시 덮어쓰기
-
-        const ws = cloneTemplateSheet(workbook, tplSheet, sheetName); // 템플릿을 새 날짜 시트로 복제
-        fillWorkLogValues(ws, payload, center);                       // 정해진 좌표에 값만 채움
-
-        const outBuf = await workbook.xlsx.writeBuffer();
-        await file.save(outBuf, {
-          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        });
-        console.log(`[근무일지 내보내기] ${filePath} / 시트 "${sheetName}" 완료`);
+        await exportWorkLogDay(center, workday);
       } catch (e) {
         console.error(`[근무일지 내보내기] ${center} 처리 실패 (다른 센터는 계속 진행):`, e);
       }
@@ -226,3 +242,29 @@ exports.workLogDailyExport = onSchedule(
     return null;
   }
 );
+
+// ==============================================================================
+// [보고서 탭 "매핑" 버튼과 동일 패턴] 과거 근무일(이번 달) 수정 후 "엑셀 반영" 버튼 — Callable
+// - 자동 트리거 대신 수동 버튼으로 함: 여러 칸을 연달아 고칠 때마다 매번 파일 전체를
+//   다운로드/재업로드하는 낭비・경합을 피하고, 반영 시점을 사용자가 직접 정하게 함.
+// - 오늘 근무일은 대상 아님(그대로 workLogDailyExport가 다음날 09:00에 처리) — 매니저
+//   화면도 오늘 날짜에는 이 버튼 자체를 안 보여줌.
+// ==============================================================================
+exports.workLogManualExport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  const claims = request.auth.token;
+  const { center, workday } = request.data || {};
+  if (!center || !workday) throw new HttpsError("invalid-argument", "센터/근무일을 지정하세요.");
+  if (claims.center_name !== center && claims.center_name !== "Master") {
+    throw new HttpsError("permission-denied", "다른 센터의 근무일지는 반영할 수 없습니다.");
+  }
+
+  const result = await exportWorkLogDay(center, workday);
+  if (!result.ok) {
+    const msg = result.reason === "no-template"
+      ? "센터 템플릿 파일(templates/{center}/work_log.xlsx)이 없습니다."
+      : "해당 날짜에 작성된 근무일지가 없습니다.";
+    throw new HttpsError("failed-precondition", msg);
+  }
+  return { ok: true };
+});

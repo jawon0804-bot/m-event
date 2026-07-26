@@ -9,6 +9,9 @@
  *                            work_logs 데이터를, Storage의 센터별 원본 양식
  *                            (templates/{center}/work_log.xlsx, 시트 "양식")을 복제해
  *                            센터별 월별 엑셀 파일(work_log/{center}/...)에 날짜 시트로 반영
+ *   workLogManualExport    : 근무일지 화면 "엑셀 반영" 버튼(Callable) — 이번 달 과거 근무일을
+ *                            불러와 수정한 뒤 누르면 그 날짜 엑셀 시트만 즉시 재생성. 오늘 근무일은
+ *                            대상 아님(그대로 workLogDailyExport가 다음날 처리)
  *   workLogDailyInit       : 매일 09:00 (Asia/Seoul) — 출근부 템플릿으로 근무일지 기본값 자동 채움
  *   loginWithCredentials   : 이름+전화번호 로그인 (M-SMART/Dashboard도 공유해서 씀)
  *   generateEventReport    : 보고서 탭 "매핑" 버튼(Callable) — 센터/상태/기간(최대 1년) 필터로
@@ -20,7 +23,7 @@
  *                            서명 URL(10분 유효) 반환
  *
  * [배포]
- *   firebase deploy --only functions:onInspectionLog,functions:onIssueUpdate,functions:issueReminderScheduler,functions:workLogDailyExport,functions:generateEventReport,functions:eventReportMonthlyExport,functions:listEventReportFiles
+ *   firebase deploy --only functions:onInspectionLog,functions:onIssueUpdate,functions:issueReminderScheduler,functions:workLogDailyExport,functions:workLogManualExport,functions:generateEventReport,functions:eventReportMonthlyExport,functions:listEventReportFiles
  *   (firebase deploy --only functions 전체 배포 금지 — 같은 프로젝트의 별도 모니터링 함수와
  *    codebase가 분리되어 있어 구조적으로는 안전하지만, 안전을 위해 항상 함수명 지정)
  *
@@ -49,6 +52,7 @@ exports.onInspectionLog = events.onInspectionLog;
 exports.onIssueUpdate = events.onIssueUpdate;
 exports.issueReminderScheduler = events.issueReminderScheduler;
 exports.workLogDailyExport = worklogExport.workLogDailyExport;
+exports.workLogManualExport = worklogExport.workLogManualExport;
 exports.workLogDailyInit = worklogAttendance.workLogDailyInit;
 exports.loginWithCredentials = auth.loginWithCredentials;
 exports.generateEventReport = reportExport.generateEventReport;
