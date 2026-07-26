@@ -27,15 +27,17 @@ exports.onInspectionLog = onDocumentWritten(
     const photos      = after.photos || "";
     const logDocId    = event.params.docId;
 
-    let fid_name = facility_id;
-    try {
-      const firstFid = (facility_id || "").split(",")[0].trim();
-      if (firstFid) {
-        const facDoc = await db.collection("center_configs").doc(center_name)
-          .collection("facilities").doc(firstFid).get();
-        if (facDoc.exists) fid_name = facDoc.data().fid_name || facility_id;
-      }
-    } catch (e) { console.warn("fid_name 조회 실패:", e); }
+    let fid_name = after.fid_name || facility_id;
+    if (!after.fid_name) {
+      try {
+        const firstFid = (facility_id || "").split(",")[0].trim();
+        if (firstFid) {
+          const facDoc = await db.collection("center_configs").doc(center_name)
+            .collection("facilities").doc(firstFid).get();
+          if (facDoc.exists) fid_name = facDoc.data().fid_name || facility_id;
+        }
+      } catch (e) { console.warn("fid_name 조회 실패:", e); }
+    }
 
     console.log(`[이슈 생성] ${center_name} / ${facility_id} / memo: ${memo}`);
 
