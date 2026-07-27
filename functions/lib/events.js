@@ -25,6 +25,14 @@ exports.onInspectionLog = onDocumentWritten(
     const worker      = after.worker || "";
     const datetime    = after.datetime || "";
     const photos      = after.photos || "";
+    // photo_count도 같이 옮긴다. 예전엔 이 필드를 events에 안 넣었는데, 읽는 쪽은
+    // 3곳이나 있어서(report-export.js의 사진 폴백, events-tab.js의 "📷 사진 N장" 배지)
+    // 항상 undefined→0으로 평가되고 있었음. 특히 report-export.js의
+    // "photos가 비면 photo_count만큼 Storage 경로로 직접 받기" 폴백이 영구 죽은
+    // 코드가 되어, M-SMART 오프라인 큐 경로처럼 photos가 비어 저장된 기록은
+    // 보고서에 사진이 0장으로 나갔다. 값 형식("3장" 문자열/숫자 혼재)은 읽는 쪽의
+    // toCount()/parseInt가 이미 둘 다 처리하므로 그대로 통과시킨다.
+    const photo_count = after.photo_count ?? "";
     const logDocId    = event.params.docId;
 
     let fid_name = after.fid_name || facility_id;
@@ -45,20 +53,20 @@ exports.onInspectionLog = onDocumentWritten(
     const eventDoc = await eventRef.get();
 
     if (eventDoc.exists) {
-      await eventRef.update({ memo, photos, updated_at: admin.firestore.FieldValue.serverTimestamp() });
+      await eventRef.update({ memo, photos, photo_count, updated_at: admin.firestore.FieldValue.serverTimestamp() });
       console.log("[이슈 업데이트] 기존 이슈 memo 수정:", eventRef.id);
       return null;
     }
 
     const legacy = await db.collection("events").where("source_log_id", "==", logDocId).limit(1).get();
     if (!legacy.empty) {
-      await legacy.docs[0].ref.update({ memo, photos, updated_at: admin.firestore.FieldValue.serverTimestamp() });
+      await legacy.docs[0].ref.update({ memo, photos, photo_count, updated_at: admin.firestore.FieldValue.serverTimestamp() });
       console.log("[이슈 업데이트] 레거시 이슈 memo 수정:", legacy.docs[0].id);
       return null;
     }
 
     await eventRef.set({
-      center_name, facility_id, fid_name, worker, memo, datetime, photos,
+      center_name, facility_id, fid_name, worker, memo, datetime, photos, photo_count,
       source_log_id: logDocId,
       status: "발생",
       history: [{ type: "발생", content: memo, by: worker, at: admin.firestore.Timestamp.now() }],
@@ -135,6 +143,15 @@ exports.issueReminderScheduler = onSchedule(
     console.log(`[3일 알림] 대상 이슈: ${snap.size}건`);
     let sent = 0;
 
+    // 센터별 관리자 메일 목록을 이 실행 안에서 재사용한다 — 예전엔 이벤트마다
+    // getAdminEmails()를 호출해서 미조치 이벤트가 100건이면 UserDB 쿼리가 100회
+    // 발생했음(센터 수는 그보다 훨씬 적음). 조회 결과는 동일하므로 동작 변화 없음.
+    const adminEmailCache = new Map();
+    const adminEmailsFor = async (center) => {
+      if (!adminEmailCache.has(center)) adminEmailCache.set(center, await getAdminEmails(center));
+      return adminEmailCache.get(center);
+    };
+
     for (const doc of snap.docs) {
       const issue = doc.data();
       const center_name = issue.center_name || "";
@@ -143,7 +160,7 @@ exports.issueReminderScheduler = onSchedule(
       const status = issue.status || "";
       const count  = (issue.notified_count || 0) + 1;
       const eventUrl = `https://m-smart-0804.web.app/index.html?id=${doc.id}`;
-      const adminEmails = await getAdminEmails(center_name);
+      const adminEmails = await adminEmailsFor(center_name);
 
       const ok = await sendMail(
         adminEmails,

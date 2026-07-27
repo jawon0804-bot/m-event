@@ -53,13 +53,33 @@ async function registerLoginResult(lockRef, success, maxAttempts = LOGIN_MAX_ATT
   });
 }
 
-// IP를 Firestore 문서 ID로 쓸 수 있게 정리 (슬래시가 경로 구분자와 충돌하므로 치환)
-function sanitizeIpForDocId(ip) {
-  return String(ip || "").trim().replace(/\//g, "_");
+// 임의 문자열을 Firestore 문서 ID로 안전하게 바꿈.
+// Firestore 제약: `/`(경로 구분자) 사용 불가, `.`/`..` 단독 불가, `__...__` 예약,
+//                 UTF-8 1500바이트 이하.
+// 예전엔 IP에만 이 처리를 하고 로그인 잠금 문서 ID로 쓰는 **이름은 그대로** 넘겼는데,
+// 이름에 `/`가 들어오면 `.doc("a/b")`가 문서가 아닌 경로로 해석돼 예외가 났다.
+// 인증이 필요 없는 엔드포인트라 누구나 500을 유발할 수 있었고, loginWithCredentials
+// 전용 ERROR 알림 정책(모바일 푸시)까지 울리는 문제로 이어졌다.
+function sanitizeDocId(raw) {
+  let s = String(raw || "").trim().replace(/\//g, "_");
+  if (!s) return "";
+
+  // 길이 제한을 먼저 적용한다 — 순서가 중요하다. 뒤에서 자르면 잘린 결과가 새로
+  // 예약 패턴(`__...__`)이 될 수 있어서, 자른 뒤에 패턴 검사를 해야 안전하다.
+  // 여유(1400)를 두는 이유는 아래 접두사가 붙어도 1500바이트를 넘지 않게 하기 위함.
+  // 멀티바이트(한글)가 중간에 끊겨 U+FFFD가 되지 않도록 바이트로 자른 뒤 복구 문자를 제거.
+  const buf = Buffer.from(s, "utf8");
+  if (buf.length > 1400) s = buf.subarray(0, 1400).toString("utf8").replace(/�+$/, "");
+
+  if (s === "." || s === "..") return `_${s}_`;
+  // 예약 패턴 `__...__`은 감싸는 방식(`_${s}_`)으로는 못 벗어난다 — `___name___`도
+  // 여전히 `^__.*__$`에 매치되기 때문. 앞에 패턴을 깨는 접두사를 붙여야 한다.
+  if (/^__.*__$/.test(s)) return `esc_${s}`;
+  return s;
 }
 
 // 로그인 시도 기록 (성공/실패/차단 관계없이 항상 남김) — 기록 실패가 로그인 자체를 막으면 안 되므로 별도 try/catch
-async function logLoginAttempt({ name, phone, ip, userAgent, success, blocked, matchedCenter, app }) {
+async function logLoginAttempt({ name, phone, ip, xffChain, userAgent, success, blocked, matchedCenter, app }) {
   try {
     await db.collection("login_attempts").add({
       input_name: name,
@@ -68,6 +88,12 @@ async function logLoginAttempt({ name, phone, ip, userAgent, success, blocked, m
       app,                     // 어떤 앱(M-Event/M-SMART 등)에서 시도했는지
       success, blocked,
       ip, user_agent: userAgent,
+      // [2026-07-27 추가] X-Forwarded-For 원본 체인 전체.
+      // 아래 ip 추출부의 미해결 질문(어느 항목이 신뢰 가능한 클라이언트 IP인가)을
+      // 실제 트래픽으로 판정하기 위한 진단용 필드다. 정상 로그인 몇 건만 쌓이면
+      // 항목이 몇 개이고 마지막이 무엇인지 확인할 수 있다. 판정 후에는 이 필드를
+      // 없애도 되고, 포렌식 용도로 남겨도 된다(login_attempts는 90일 TTL 적용 중).
+      xff_chain: xffChain || "",
       at: admin.firestore.FieldValue.serverTimestamp(),
       // [2026-07-11 추가] Firestore TTL 정책 대상 필드 — expireAt이 지나면
       // Firestore가 자동으로 문서를 삭제한다 (별도 삭제 배치 불필요).
@@ -101,7 +127,19 @@ function isAppAllowed(userData, appId) {
 exports.loginWithCredentials = onCall(async (request) => {
   const { name, phone, app /*, password (향후 확장) */ } = request.data || {};
   const rawRequest = request.rawRequest;
-  const ip = (rawRequest?.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || rawRequest?.ip || "";
+  // ⚠️ [2026-07-27 미해결] IP 잠금의 신뢰성 문제 — 아직 동작을 바꾸지 않았음.
+  // X-Forwarded-For는 "클라이언트가 보낸 값들, 인프라가 덧붙인 값들" 순서로 쌓이고,
+  // GCP LB/Cloud Run은 클라이언트가 임의로 넣은 XFF를 지우지 않고 뒤에 덧붙인다.
+  // 그렇다면 아래 [0]은 공격자가 매 요청마다 바꿔 넣을 수 있는 값이므로,
+  // 2026-07-11에 이름 단위 잠금 우회를 막기 위해 넣은 IP 단위 잠금이 헤더 하나로
+  // 무력화된다.
+  // 다만 단순히 "마지막 항목"으로 바꾸는 건 더 위험할 수 있다 — 배포 형태에 따라
+  // 마지막이 Google LB IP라면 모든 요청이 같은 키로 합산되어 전체 사용자 로그인을
+  // 막는 사실상의 전역 잠금이 된다(constants.js가 DoS 위험 때문에 일부러 피한 것).
+  // 그래서 추측으로 바꾸지 않고, 위 logLoginAttempt에 xff_chain(원본 전체)을 기록해
+  // 실제 트래픽으로 항목 구성을 확인한 뒤 올바른 인덱스를 고정하기로 함.
+  const xffChain = String(rawRequest?.headers?.["x-forwarded-for"] || "");
+  const ip = xffChain.split(",")[0].trim() || rawRequest?.ip || "";
   const userAgent = rawRequest?.headers?.["user-agent"] || "";
 
   const cleanName  = String(name || "").trim();
@@ -113,12 +151,12 @@ exports.loginWithCredentials = onCall(async (request) => {
 
   // 1) 잠금 여부 먼저 확인 — UserDB 조회 전에 차단해서 무차별 대입 비용을 낮춤
   //    (이름 단위 잠금은 어느 앱으로 시도하든 같은 사람을 노린 시도이므로 합산)
-  const lockRef = db.collection("login_lockouts").doc(cleanName);
+  const lockRef = db.collection("login_lockouts").doc(sanitizeDocId(cleanName));
   const preCheck = await lockRef.get();
   if (preCheck.exists) {
     const d = preCheck.data();
     if (d.lockedUntil && d.lockedUntil.toMillis() > Date.now()) {
-      await logLoginAttempt({ name: cleanName, phone: cleanPhone, ip, userAgent, success: false, blocked: true, matchedCenter: null, app: appId });
+      await logLoginAttempt({ name: cleanName, phone: cleanPhone, ip, xffChain, userAgent, success: false, blocked: true, matchedCenter: null, app: appId });
       const remainMin = Math.ceil((d.lockedUntil.toMillis() - Date.now()) / 60000);
       throw new HttpsError("resource-exhausted", `로그인 시도가 너무 많습니다. ${remainMin}분 후 다시 시도하세요.`);
     }
@@ -126,14 +164,14 @@ exports.loginWithCredentials = onCall(async (request) => {
 
   // 1-2) [2026-07-11 추가] IP 단위 잠금도 확인 — 이름을 바꿔가며 시도해서 이름 단위
   //      잠금을 우회하는 공격을 막기 위함 (위 IP_MAX_ATTEMPTS 주석 참고)
-  const ipDocId = sanitizeIpForDocId(ip);
+  const ipDocId = sanitizeDocId(ip);
   const ipLockRef = ipDocId ? db.collection("login_lockouts_ip").doc(ipDocId) : null;
   if (ipLockRef) {
     const ipPreCheck = await ipLockRef.get();
     if (ipPreCheck.exists) {
       const d = ipPreCheck.data();
       if (d.lockedUntil && d.lockedUntil.toMillis() > Date.now()) {
-        await logLoginAttempt({ name: cleanName, phone: cleanPhone, ip, userAgent, success: false, blocked: true, matchedCenter: null, app: appId });
+        await logLoginAttempt({ name: cleanName, phone: cleanPhone, ip, xffChain, userAgent, success: false, blocked: true, matchedCenter: null, app: appId });
         const remainMin = Math.ceil((d.lockedUntil.toMillis() - Date.now()) / 60000);
         throw new HttpsError("resource-exhausted", `이 네트워크에서 로그인 시도가 너무 많습니다. ${remainMin}분 후 다시 시도하세요.`);
       }
@@ -174,7 +212,7 @@ exports.loginWithCredentials = onCall(async (request) => {
 
   // 4) 성공/실패 무관하게 항상 기록
   await logLoginAttempt({
-    name: cleanName, phone: cleanPhone, ip, userAgent,
+    name: cleanName, phone: cleanPhone, ip, xffChain, userAgent,
     success: !!matched, blocked: false,
     matchedCenter: matched ? matched.data().center_name : null,
     app: appId,

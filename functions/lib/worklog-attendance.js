@@ -150,15 +150,30 @@ exports.workLogDailyInit = onSchedule(
         const payload = aggregateAttendance(ws, today.d);
         if (!payload) { console.warn(`[출근부 매핑] ${center} 집계 실패 — 스킵`); continue; }
 
-        await docRef.set({
-          ...payload,
-          center_name: center,
-          workday,
-          date_input: workday,
-          source: "attendance_auto",
-          updated_at: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        console.log(`[출근부 매핑] ${docId} 자동 채움 완료`);
+        // 최종 쓰기는 set(merge) 대신 create()를 쓴다 — 위 get() 확인과 이 쓰기 사이에
+        // 사용자가 문서를 만들면 set(merge)는 그 위에 덮어써버려서, 이 함수 주석이
+        // 말하는 "수기 작성 중인 문서는 절대 덮어쓰지 않음"이 실제로는 보장되지
+        // 않았다(TOCTOU). create()는 문서가 이미 있으면 실패하므로 의도가 코드로
+        // 보장된다. 위의 get() 확인은 그대로 두는데, 이미 있으면 무거운 엑셀 템플릿
+        // 다운로드/집계를 아예 건너뛰는 값싼 조기 종료 역할이라 여전히 유용하다.
+        try {
+          await docRef.create({
+            ...payload,
+            center_name: center,
+            workday,
+            date_input: workday,
+            source: "attendance_auto",
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`[출근부 매핑] ${docId} 자동 채움 완료`);
+        } catch (e) {
+          // gRPC ALREADY_EXISTS(6) — 조회 직후 사용자가 수기 작성을 시작한 경우
+          if (e.code === 6 || e.code === "already-exists") {
+            console.log(`[출근부 매핑] ${docId} 쓰기 직전에 생성됨(수기 작성) — 덮어쓰지 않고 스킵`);
+          } else {
+            throw e;
+          }
+        }
       } catch (e) {
         console.error(`[출근부 매핑] ${center} 처리 실패 (다른 센터는 계속 진행):`, e);
       }
