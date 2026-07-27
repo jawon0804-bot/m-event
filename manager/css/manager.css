@@ -172,6 +172,37 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   padding: 7px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .search-btn:hover { background: var(--navy2); }
+.search-btn:disabled { background: var(--gray3); cursor: progress; }
+
+/* 엑셀 탭 선택 바 — 전체선택 체크박스 + 선택 건수 + 선택해제 */
+.excel-select-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 12px 24px 0; padding: 9px 14px;
+  background: var(--gray0); border: 1px solid var(--gray2); border-radius: 8px;
+}
+.excel-select-all {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 600; color: var(--text); cursor: pointer;
+}
+.excel-select-all input[type="checkbox"] { width: 17px; height: 17px; cursor: pointer; accent-color: var(--navy); }
+.excel-select-count { font-size: 12.5px; color: var(--navy2); font-weight: 600; }
+.excel-clear-btn {
+  margin-left: auto; background: none; border: 1px solid var(--gray2);
+  border-radius: 6px; padding: 4px 12px; font-size: 12px; color: var(--gray4); cursor: pointer;
+}
+.excel-clear-btn:hover { background: #fff; color: var(--text); }
+.excel-clear-btn:disabled { opacity: .45; cursor: default; }
+
+/* 엑셀 탭 "파일 병합" 진행/결과 안내 — .report-status-msg와 같은 규칙,
+   다만 filter-bar 바로 아래에 붙어서 좌우 여백을 페이지에 맞춘다 */
+.excel-merge-msg {
+  margin: 10px 24px 0; padding: 9px 14px; border-radius: 6px;
+  font-size: 12.5px; color: var(--gray4); background: var(--gray0);
+}
+.excel-merge-msg:empty { display: none; }
+.excel-merge-msg.success { background: #ecfdf3; color: #15803d; }
+.excel-merge-msg.error   { background: #fef2f2; color: #dc2626; }
+.excel-merge-msg.warn    { background: #fff7ed; color: #9a3412; }
 
 /* 스피너 */
 .spinner-wrap {
@@ -200,6 +231,11 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   transition: background .1s;
 }
 .excel-item:hover { background: #f0f4ff; }
+/* 병합 대상 선택 — 체크된 행은 배경으로 구분 (hover가 잠시 덮는 건 의도) */
+.excel-item.selected { background: #eef4fc; }
+.excel-item-check {
+  width: 17px; height: 17px; flex-shrink: 0; cursor: pointer; accent-color: var(--navy);
+}
 .excel-icon { font-size: 28px; flex-shrink: 0; }
 .excel-info { flex: 1; }
 .excel-title  { font-size: 15px; font-weight: 600; color: var(--text); }

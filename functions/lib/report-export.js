@@ -15,9 +15,9 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const ExcelJS = require("exceljs");
-const JSZip = require("jszip");
 const { admin, db, bucket } = require("./firebase");
 const { getKstDateParts } = require("./dateUtils");
+const { fixSheetPrOrder } = require("./excel-utils");
 const {
   REPORT_TEMPLATE_PATH, REPORT_TEMPLATE_SHEET, REPORT_DATA_START_ROW,
   REPORT_MAX_ROWS, REPORT_PHOTO_SIZE_PX, REPORT_STATUS_COLOR,
@@ -287,29 +287,15 @@ async function buildReportWorkbook({ center, start, end, events }) {
 // 손상됐다고 판단함 — ExcelJS 자체 버그라 라이브러리 옵션으로는 못 피하고, 저장된
 // buffer의 XML을 직접 열어서 두 태그 순서를 바꾼 뒤 다시 압축하는 방식으로 우회한다.
 // (fitToPage를 계속 켜 놓고 있으니 매핑/월간 자동생성 양쪽 다 이 후처리를 거쳐야 함.)
+//
+// [2026-07-27] 이 후처리는 lib/excel-utils.js의 fixSheetPrOrder로 옮겼다. 예전 버전은
+// "xl/worksheets/sheet1.xml" 하나만 고쳤는데, 시트가 여러 개인 엑셀 탭 통합 다운로드에서는
+// 나머지 시트가 전부 안 고쳐진 채 남기 때문에 워크시트 전체를 도는 버전으로 일반화했다.
+// 이벤트 보고서는 시트가 1개라 결과는 예전과 동일하다.
 // ==============================================================================
-async function fixSheetPrOrder(buf) {
-  const zip = await JSZip.loadAsync(buf);
-  const path = "xl/worksheets/sheet1.xml";
-  const file = zip.file(path);
-  if (!file) return buf; // 못 찾으면 원본 그대로 반환 (방어적 처리)
-
-  let xml = await file.async("string");
-  const fixed = xml.replace(
-    /<sheetPr>(<pageSetUpPr[^>]*\/>)(<outlinePr[^>]*\/>)<\/sheetPr>/,
-    "<sheetPr>$2$1</sheetPr>"
-  );
-  if (fixed === xml) {
-    console.warn("[이벤트 보고서] sheetPr 순서 패턴을 못 찾음 — ExcelJS 출력 형식이 바뀌었을 수 있음");
-    return buf;
-  }
-  zip.file(path, fixed);
-  return zip.generateAsync({ type: "nodebuffer" });
-}
-
 async function writeReportBuffer(wb) {
   const buf = await wb.xlsx.writeBuffer();
-  return fixSheetPrOrder(buf);
+  return fixSheetPrOrder(buf, "[이벤트 보고서]");
 }
 
 // ==============================================================================

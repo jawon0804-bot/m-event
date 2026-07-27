@@ -27,3 +27,10 @@ let unsubscribe  = null;
 const PAGE_SIZE = 30;
 let eventPage = 1, excelPage = 1, photoPage = 1;
 
+// ── 엑셀 탭 병합 선택 상태 ──
+// excelDocs: 현재 조회 결과 전체(페이지네이션 이전). "전체 선택"이 화면에 보이는 30건이
+//            아니라 조회된 전부를 대상으로 하려면 목록 전체를 들고 있어야 한다.
+// excelSelectedIds: 체크된 문서 ID. 페이지를 넘겨도 선택이 유지되도록 목록과 분리해서 관리.
+let excelDocs = [];
+let excelSelectedIds = new Set();
+

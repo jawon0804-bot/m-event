@@ -86,7 +86,22 @@
       <label>종료일</label>
       <input type="date" id="filter-end-excel">
       <button class="search-btn" onclick="excelPage=1;loadExcel()">🔍 조회</button>
+      <button class="search-btn" id="excel-merge-btn" onclick="mergeSelectedExcel()" disabled
+              title="체크한 점검표를 시트별로 합친 엑셀 한 개로 내려받습니다">
+        <i class="fa-solid fa-layer-group"></i> 파일 병합
+      </button>
     </div>
+    <!-- 선택 바 — 조회 결과가 있을 때만 보임 -->
+    <div id="excel-select-bar" class="excel-select-bar" style="display:none">
+      <label class="excel-select-all">
+        <input type="checkbox" id="excel-check-all" onchange="toggleAllExcel(this.checked)">
+        <span id="excel-check-all-label">전체 선택</span>
+      </label>
+      <span id="excel-select-count" class="excel-select-count"></span>
+      <button type="button" class="excel-clear-btn" id="excel-clear-btn"
+              onclick="clearExcelSelection()">선택 해제</button>
+    </div>
+    <div id="excel-merge-msg" class="excel-merge-msg"></div>
     <div class="spinner-wrap" id="spinner-excel">
       <div class="spinner"></div>
       <p>엑셀 목록 불러오는 중...</p>

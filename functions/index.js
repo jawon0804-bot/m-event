@@ -21,6 +21,9 @@
  *                            report/{center}/{y}년_{m}월_이벤트보고서.xlsx 로 자동 저장
  *   listEventReportFiles   : 보고서 탭 "다운로드" 버튼(Callable) — report/{center}/ 파일 목록 +
  *                            서명 URL(10분 유효) 반환
+ *   mergeExcelFiles        : 엑셀 탭 "파일 병합" 버튼(Callable) — 목록에서 체크한 Maxerve_Excel
+ *                            점검표들(문서 ID 목록)을 워크북 1개(파일당 시트 1개)로 합쳐
+ *                            excel_merge/{center}/ 에 저장하고 서명 URL(10분) 반환
  *
  * [배포]
  *   평소에는 main에 push하면 CI(.github/workflows/firebase-deploy.yml)가 배포한다.
@@ -48,6 +51,9 @@
  *   lib/worklog-attendance.js — workLogDailyInit (출근부 → 근무일지 자동 채움)
  *   lib/auth.js               — loginWithCredentials
  *   lib/report-export.js       — generateEventReport / eventReportMonthlyExport / listEventReportFiles
+ *   lib/excel-merge.js          — mergeExcelFiles (엑셀 탭 통합 다운로드)
+ *   lib/excel-utils.js           — ExcelJS 공통 유틸(워크북 간 시트 복제 + sheetPr 순서 교정).
+ *                                  worklog-export / report-export / excel-merge 셋이 공유한다.
  */
 
 const events = require("./lib/events");
@@ -55,6 +61,7 @@ const worklogExport = require("./lib/worklog-export");
 const worklogAttendance = require("./lib/worklog-attendance");
 const auth = require("./lib/auth");
 const reportExport = require("./lib/report-export");
+const excelMerge = require("./lib/excel-merge");
 
 exports.onInspectionLog = events.onInspectionLog;
 exports.onIssueUpdate = events.onIssueUpdate;
@@ -66,3 +73,4 @@ exports.loginWithCredentials = auth.loginWithCredentials;
 exports.generateEventReport = reportExport.generateEventReport;
 exports.eventReportMonthlyExport = reportExport.eventReportMonthlyExport;
 exports.listEventReportFiles = reportExport.listEventReportFiles;
+exports.mergeExcelFiles = excelMerge.mergeExcelFiles;
