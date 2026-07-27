@@ -23,9 +23,17 @@
  *                            서명 URL(10분 유효) 반환
  *
  * [배포]
- *   firebase deploy --only functions:onInspectionLog,functions:onIssueUpdate,functions:issueReminderScheduler,functions:workLogDailyExport,functions:workLogManualExport,functions:generateEventReport,functions:eventReportMonthlyExport,functions:listEventReportFiles
- *   (firebase deploy --only functions 전체 배포 금지 — 같은 프로젝트의 별도 모니터링 함수와
- *    codebase가 분리되어 있어 구조적으로는 안전하지만, 안전을 위해 항상 함수명 지정)
+ *   평소에는 main에 push하면 CI(.github/workflows/firebase-deploy.yml)가 배포한다.
+ *   CI는 **이 파일의 exports 목록에서 배포 대상을 자동 추출**하므로, 함수를 추가/삭제할 때
+ *   워크플로를 따로 고칠 필요가 없다. (예전엔 워크플로에 함수명을 하드코딩해뒀다가 갱신을
+ *   잊어서 "코드는 있는데 배포는 안 되는" 상태가 세 번 반복됐다 — loginWithCredentials,
+ *   workLogDailyInit, 그리고 보고서 함수 3개. 그래서 목록의 출처를 이 파일 하나로 통일했다.)
+ *
+ *   수동 배포가 꼭 필요하면 codebase 프리픽스를 붙여 함수명을 지정할 것:
+ *     firebase deploy --only functions:m-event:onInspectionLog,functions:m-event:...
+ *   ⚠️ `--only functions`(전체)는 절대 금지 — 같은 Firebase 프로젝트에 m-smart-monitor의
+ *   collectMetrics/getDashboardData(us-central1)가 함께 있어서 전체 배포가 그 함수들을
+ *   삭제 시도할 수 있다. `functions:m-event:함수명` 형태만 사용한다.
  *
  * [환경변수/시크릿]
  *   GMAIL_USER, GMAIL_PASS — Secret Manager(defineSecret)로만 관리. 평문 .env 파일 절대 병행 금지.
