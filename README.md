@@ -207,26 +207,26 @@ codebase 프리픽스를 빼면 배포가 조용히 실패(silent abort)할 수 
 
 ---
 
-## 🔗 m-event는 자체 서버가 없어요 (Dashboard에 얹혀가는 구조)
+## 🔗 m-event는 자체 서버가 없어요 (그래도 Dashboard에 의존하지는 않아요)
 
-m-event는 **자체 Cloud Run 서버(server.js)가 없어요.**
+m-event는 **자체 Cloud Run 서버(server.js)가 없어요.** 화면이 Firestore를 직접 읽고, 무거운 작업(엑셀 생성·메일·로그인 판정)만 Cloud Functions가 맡는 구조예요.
 
-### 왜 이렇게 됐나요? (히스토리)
-원래 m-event는 **자체 `server.js`를 따로 갖고 있었어요.** 그런데 화면에 `기계_01`, `전기_01`, `순찰_02` 같은 설비ID를 그대로 보여주면 사람이 봐서는 그게 어디에 있는 무슨 설비인지 알 수가 없는 문제가 있었어요. 이걸 `OHD1F_1A01` 같은 실제 위치명이나 점검표 이름(시트라벨)으로 바꿔서 보여줘야 했는데, **그 "ID → 사람이 읽는 이름" 매핑 로직이 이미 Dashboard(facility-dashboard)의 server.js에 구현되어 있었어요** (`getFidLocations`, `getSheetLabels` 함수). 그래서 m-event에 똑같은 로직을 중복으로 또 만드는 대신, Dashboard의 API(`/api/fidlocations`)를 가져다 쓰는 쪽으로 리팩토링됐어요.
+### 히스토리 — Dashboard API를 빌려 쓰던 시절과 그 종료
+화면에 `기계_01`, `전기_01` 같은 설비ID를 그대로 보여주면 그게 어디의 무슨 설비인지 알 수가 없어서, `OHD1F_1A01` 같은 위치명이나 점검표 이름(시트라벨)으로 바꿔 보여줘야 했어요. 그 "ID → 사람이 읽는 이름" 매핑 로직이 이미 Dashboard의 `server.js`에 있었기 때문에(`getFidLocations`, `getSheetLabels`), 중복 구현 대신 **Dashboard의 `/api/fidlocations`를 호출해서 쓰던 시기가 있었어요.**
 
-> 🧸 비유: m-event도 원래는 자기만의 "이름표 변환기"를 갖고 있었는데, 알고 보니 옆집(Dashboard)에 이미 똑같은 변환기가 있어서, 자기 것은 버리고 옆집 것을 빌려 쓰기로 한 거예요.
+> ✅ **[2026-07-11] 이 의존은 없어졌어요.** `firestore.rules`가 `center_configs/{center}/**`를 로그인 사용자 본인 센터(또는 Master)에 한해 직접 읽도록 이미 허용하고 있어서, **m-event가 Firestore를 직접 읽는 방식으로 전환**했어요 (`manager/js/auth.js`의 `loadFidLocations`). Dashboard가 죽어 있어도 m-event 설비명 표시는 멀쩡해요.
 
-### 지금 구조
-- 로그인 판정은 Cloud Function(`loginWithCredentials`)이, 이벤트 목록 실시간 구독·엑셀/사진 조회는 **여전히 m-event 화면이 Firestore에 직접 접속**해요 (Dashboard를 거치지 않음).
-- **설비 이름 표시(`fidLocations`, `sheetLabels`)만 유일하게 Dashboard의 `/api/fidlocations`를 거쳐요.**
+### 지금 구조 (Dashboard 호출 0건)
+- **설비 이름 매핑**: `center_configs/{center}/facilities`(→`fid_name`)와 `center_configs/{center}/inspections`(→`sheet_label`)를 **직접 조회**. 우선순위는 `sheet_label` > `fid_name` > 설비ID.
+- **이벤트 목록/엑셀/사진**: 화면이 Firestore에 직접 접속 (원래부터 Dashboard를 안 거침).
+- **로그인 판정**: 자체 Cloud Function `loginWithCredentials`.
+- 즉 **m-event → Dashboard 방향의 런타임 의존은 전혀 없어요.** 반대 방향(Dashboard → m-event의 `loginWithCredentials`)만 남아 있어요.
 
-```js
-const DASHBOARD_API = "https://facility-dashboard-267082158406.asia-northeast3.run.app";
-...
-fetch(`${DASHBOARD_API}/api/fidlocations?center=...`);
-```
-
-> ⚠️ **유지보수 시 알아둘 점**: 이 구조 때문에 m-event와 Dashboard는 **서로 의존 관계**예요. Dashboard의 `/api/fidlocations` 엔드포인트 이름이나 응답 형식을 바꾸면, m-event의 설비 이름 표시 기능이 같이 망가질 수 있어요.
+> ⚠️ **[2026-07-29 문서 정정]** 이 절엔 07-11 이후로도 계속 "설비 이름 표시만 유일하게 Dashboard의 `/api/fidlocations`를 거쳐요"라는 설명과 `const DASHBOARD_API = ...; fetch(...)` 코드 예제가 남아 있었어요. **그 코드는 저장소 어디에도 존재하지 않았어요.** 리팩토링 커밋이 코드만 바꾸고 README·`system_map.md`·Dashboard 쪽 문서를 갱신하지 않아서 생긴 오차예요.
+>
+> 이 오차가 실제로 비용을 만들었어요 — Dashboard 쪽에서는 "m-event가 쓰니까 무인증을 유지해야 한다"는 전제로 그 엔드포인트를 계속 열어뒀고, 07-27엔 그 전제 위에서 방어 로직까지 추가했어요. 소비자가 이미 없다는 걸 확인한 07-29에 **인증 필수로 전환**했습니다.
+>
+> 🧭 교훈: 저장소 간 의존을 **끊는** 변경은 만드는 변경보다 문서 갱신을 잊기 쉬워요(당장 아무것도 안 깨지니까). 의존을 제거하면 `system_map.md`의 1·3·4번 항목을 반드시 같이 고치세요.
 
 ---
 

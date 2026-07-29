@@ -1,0 +1,130 @@
+rules_version = '2';
+
+// ==============================================================================
+// Firebase Storage 보안 규칙 (버킷: m-smart-90148.firebasestorage.app)
+//
+// [2026-07-29 신규 — 버전 관리 편입 + CRITICAL 수정]
+//
+// 이 파일이 생기기 전까지 Storage 규칙은 **어느 저장소에도 없었고** Firebase 콘솔에만
+// 존재했다. 그래서 코드 리뷰에도, git 히스토리에도 잡히지 않았다. 실제로 조회해보니
+// 라이브 규칙(ruleset c2e0f48c, 2026-07-10 배포)이 아래 상태였다:
+//
+//     match /{allPaths=**} {
+//       allow read, write: if true;   // ⭐ isSignedIn() 제거
+//     }
+//
+// 즉 **버킷 전체가 인증 없이 읽기·쓰기·덮어쓰기 가능**했다. 점검 사진(inspection_photos),
+// 생성된 점검표(excel), 이벤트 보고서(report), 근무일지(work_log), 센터 템플릿(templates)이
+// 전부 포함된다. 위쪽 templates/ 규칙은 이 catch-all 때문에 무의미했다 — Storage 규칙은
+// 매칭되는 규칙 중 **하나라도** 허용하면 통과시키기 때문이다.
+//
+// 왜 이 상태가 됐나: 주석("isSignedIn() 제거")으로 보아, M-SMART 사진 업로드가
+// storage/unauthorized로 실패하던 문제를 뚫으려고 일시적으로 연 것으로 보인다. 그 실패의
+// 진짜 원인은 규칙이 아니라 "localStorage엔 로그인 정보가 있는데 Firebase Auth 세션은 끊긴
+// 상태로 진행"이었고, M-SMART/public/js/config.js의 onAuthStateChanged 대기 로직으로 이미
+// 해결됐다. 규칙만 원복되지 않은 채 남은 것이다.
+//
+// 2026-07-11 보안 감사가 firestore.rules를 "if true" 상태에서 전면 재작성했는데, 그
+// 감사는 Firestore만 다뤘고 Storage는 대상이 아니었다(라이브 ruleset 생성일이 07-10으로
+// 감사 하루 전인 것과 일치). 같은 종류의 구멍이 옆 서비스에 그대로 남아 있던 셈이다.
+//
+// ------------------------------------------------------------------------------
+// [설계 원칙] firestore.rules와 동일하게 deny-by-default + 센터 격리.
+//
+// Admin SDK(Cloud Functions, Dashboard server.js, M-Engine)는 이 규칙을 우회하므로
+// 서버 동작에는 영향이 없다. 서명 URL(getSignedUrl)과 이미 발급된 다운로드 토큰
+// (`?alt=media&token=...`)도 GCS 레벨이라 규칙과 무관하게 계속 동작한다.
+// 따라서 이 규칙이 실제로 통제하는 건 **브라우저가 Firebase SDK로 직접 접근하는 경로**뿐이다.
+//
+// 아래 경로별 규칙은 2026-07-29에 M-SMART/m-event/Dashboard 프런트엔드 전수 grep으로
+// 확인한 실제 접근 경로에 1:1로 대응한다. 새 경로를 쓰기 전에 여기 먼저 추가할 것.
+// ==============================================================================
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 커스텀 클레임은 m-event의 loginWithCredentials가 심는다
+    // (center_name / active / name / apps). firestore.rules와 같은 출처.
+    function isMaster() {
+      return isSignedIn() && request.auth.token.center_name == "Master";
+    }
+
+    function ownsCenter(center) {
+      return isSignedIn() && (request.auth.token.center_name == center || isMaster());
+    }
+
+    function isAdminOrMaster() {
+      return isSignedIn() &&
+        (request.auth.token.active == true || request.auth.token.center_name == "Master");
+    }
+
+    // ── 점검 사진 ────────────────────────────────────────────────
+    // write: M-SMART 브라우저가 직접 업로드
+    //        (public/js/submit.js의 uploadAndSave, public/js/offline-db.js의 syncOfflineQueue)
+    // read : 업로드 직후 getDownloadURL + m-event 화면의 사진 조회
+    //        (manager/js/events-tab.js loadEventPhotos, manager/js/photo-tab.js)
+    //
+    // ⚠️ delete를 막아둔 이유: 현장 점검 사진은 부정점검 방지 증빙이라 클라이언트가
+    //   지울 수 있으면 안 된다. 반면 update(덮어쓰기)는 **일부러 허용**한다 —
+    //   오프라인 큐가 같은 파일명으로 재전송할 때(업로드는 됐는데 응답을 못 받은 경우)
+    //   create만 허용하면 재시도가 영구히 거부되어 큐에 갇힌다.
+    match /inspection_photos/{center}/{fileName} {
+      allow read, write: if ownsCenter(center);
+      allow delete: if false;
+    }
+
+    // ── M-Engine이 생성한 점검표 엑셀 ─────────────────────────────
+    // 쓰기는 M-Engine(Admin SDK)만. 읽기는 m-event 엑셀 탭이 Maxerve_Excel의
+    // storage_path를 getDownloadURL로 변환할 때 필요 (manager/js/excel-tab.js resolveExcelUrl).
+    match /excel/{center}/{fileName} {
+      allow read: if ownsCenter(center);
+      allow write, delete: if false;
+    }
+
+    // ── 근무일지 월별 엑셀 ───────────────────────────────────────
+    // 쓰기는 workLogDailyExport/workLogManualExport(Admin SDK)만.
+    // 읽기는 근무일지 탭 다운로드 (manager/js/worklog.js의 연도별 12개월 조회).
+    match /work_log/{center}/{fileName} {
+      allow read: if ownsCenter(center);
+      allow write, delete: if false;
+    }
+
+    // ── 센터 템플릿 ──────────────────────────────────────────────
+    // 기존 라이브 규칙의 의미를 그대로 유지한다(읽기=로그인, 쓰기=관리자/Master).
+    // 근무일지 탭의 출근부 템플릿 업로드/다운로드(worklog.js의 templates/{center}/work_sheet.xlsx)가
+    // 이 경로를 쓴다. M-Engine의 template.xlsx와 이벤트 보고서 양식(templates/report/event.xlsx)은
+    // Admin SDK로 읽으므로 규칙과 무관하다.
+    //
+    // 📌 미결: 이 규칙만 센터 격리가 안 되어 있다(로그인만 하면 남의 센터 템플릿도 읽힘).
+    //   이번 변경은 "버킷 전체 개방"을 막는 게 목적이라 기존 의미를 바꾸지 않았다.
+    //   센터 격리로 좁히려면 read를 ownsCenter(center)로 바꾸면 되는데, 그 전에
+    //   Master가 아닌 관리자가 다른 센터 템플릿을 손대는 운영 흐름이 없는지 확인이 필요하다.
+    match /templates/{center}/{fileName} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrMaster();
+      allow delete: if false;
+    }
+
+    // ── 서버 전용 산출물 ─────────────────────────────────────────
+    // 이벤트 보고서(report/)와 엑셀 통합본(excel_merge/)은 Cloud Functions가 만들고
+    // 서명 URL(10분)로만 내보낸다. Dashboard도 server.js에서 서명해서 준다.
+    // 브라우저가 Firebase SDK로 직접 접근할 일이 없으므로 명시적으로 차단한다
+    // (서명 URL은 이 규칙과 무관하게 계속 동작한다).
+    match /report/{allPaths=**} {
+      allow read, write: if false;
+    }
+    match /excel_merge/{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // ── 기본 차단 ────────────────────────────────────────────────
+    // 여기 있던 `allow read, write: if true`가 위 모든 규칙을 무력화하고 있었다.
+    // 새 경로가 필요하면 이 아래에 열지 말고 **위에 명시적 match를 추가**할 것.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

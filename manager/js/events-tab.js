@@ -209,7 +209,11 @@ async function loadEventPhotos(ev) {
   sec.style.display = "block";
   grid.innerHTML = `<div class="photo-loading"><div style="width:32px;height:32px;border:3px solid var(--gray2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;margin-right:8px;vertical-align:middle"></div>사진 불러오는 중...</div>`;
   const dt         = (ev.datetime||"").replace(/[-: ]/g,"").slice(0,12);
-  const facilityId = (ev.facility_id||"").replace(/\s/g,"_");
+  // [2026-07-29 수정] 파일을 실제로 쓰는 M-SMART(public/js/submit.js)의 cleanFid와 동일 규칙.
+  // 예전엔 공백을 밑줄로 바꿨는데(`/\s/g,"_"`) M-SMART는 지운다 — 설비ID에 공백/특수문자가
+  // 있으면 실제 파일명과 어긋나 사진을 못 찾았다. photo-tab.js·report-export.js·
+  // Dashboard lib/photoNaming.js와 항상 같이 유지할 것.
+  const facilityId = (ev.facility_id||"").replace(/[/\\?%*:|"<>\s]/g,"");
 
   const tasks = [];
   for (let i = 1; i <= Math.min(count,3); i++) {

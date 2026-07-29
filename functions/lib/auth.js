@@ -23,6 +23,7 @@ const {
   IP_MAX_ATTEMPTS,
   IP_LOCKOUT_MINUTES,
   LOGIN_ATTEMPT_RETENTION_DAYS,
+  LOGIN_NAME_LOOKUP_LIMIT,
 } = require("../config/constants");
 
 // 로그인 시도 결과를 잠금 문서에 원자적으로 반영 (동시 요청 레이스 방지)
@@ -179,9 +180,24 @@ exports.loginWithCredentials = onCall(async (request) => {
   }
 
   // 2) UserDB 대조 (서버에서 수행)
+  // 이름으로 후보를 뽑고 전화번호는 메모리에서 대조한다 — phone이 "010-1234-5678"과
+  // "01012345678" 두 형식으로 섞여 저장돼 있어서 Firestore 동등 쿼리로는 못 맞추기 때문.
+  // ⚠️ 그래서 "이름 조회 상한"이 곧 "동명이인 허용 인원"이 된다 (constants.js 주석 참고).
   let matched = null;
   try {
-    const snap = await db.collection("UserDB").where("name", "==", cleanName).limit(5).get();
+    const snap = await db.collection("UserDB")
+      .where("name", "==", cleanName)
+      .limit(LOGIN_NAME_LOOKUP_LIMIT)
+      .get();
+    // 상한에 실제로 닿았다면 대조 대상에서 빠진 사람이 있을 수 있다. 그 사람은
+    // 정보가 정확해도 실패로 처리되므로, 원인을 추적할 수 있게 반드시 로그를 남긴다
+    // (예전엔 limit(5)에 조용히 걸려도 평범한 인증 실패와 구분되지 않았다).
+    if (snap.size >= LOGIN_NAME_LOOKUP_LIMIT) {
+      console.error(
+        `[로그인] 동명이인이 조회 상한(${LOGIN_NAME_LOOKUP_LIMIT})에 도달했습니다: "${cleanName}". ` +
+        `상한 밖 사용자는 정보가 맞아도 로그인할 수 없습니다 — LOGIN_NAME_LOOKUP_LIMIT을 올리거나 UserDB를 정리하세요.`
+      );
+    }
     matched = snap.docs.find(d => (d.data().phone || "").replace(/[^0-9]/g, "") === cleanPhone) || null;
   } catch (e) {
     console.error("[로그인] UserDB 조회 실패:", e);

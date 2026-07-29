@@ -87,7 +87,11 @@ async function loadPhotoGroup(date, items) {
   const tasks = [];
   for (const item of items) {
     const count      = toCount(item.photo_count);
-    const facilityId = (item.facility_id||"").replace(/\s/g,"_");
+    // [2026-07-29 수정] 파일을 실제로 쓰는 M-SMART(public/js/submit.js)의 cleanFid와 동일 규칙.
+    // 예전엔 공백을 밑줄로 바꿔서(`/\s/g,"_"`) 실제 파일명과 어긋났다.
+    // ⚠️ system_map.md는 이 규칙이 "3곳에 중복"이라고 적어놨지만 실제로는 **여기까지 4곳**이다
+    //    (events-tab.js / photo-tab.js / functions/lib/report-export.js / Dashboard lib/photoNaming.js).
+    const facilityId = (item.facility_id||"").replace(/[/\\?%*:|"<>\s]/g,"");
     const dt         = (item.datetime||"").replace(/[-: ]/g,"").slice(0,12);
     for (let i = 1; i <= Math.min(count,3); i++) {
       const fileName = `${dt.slice(0,8)}_${dt.slice(8,12)}_${facilityId}_${i}.jpg`;

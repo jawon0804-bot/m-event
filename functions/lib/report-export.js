@@ -131,7 +131,11 @@ async function resolvePhotoBuffers(ev) {
   const count = Math.min(parseInt(String(ev.photo_count ?? "0").replace(/[^0-9]/g, ""), 10) || 0, 3);
   if (count === 0) return out;
   const dt = String(ev.datetime || "").replace(/[-: ]/g, "").slice(0, 12);
-  const facilityId = String(ev.facility_id || "").replace(/\s/g, "_");
+  // [2026-07-29 수정] 파일을 실제로 쓰는 M-SMART(public/js/submit.js)의 cleanFid와
+  // 동일한 규칙. 예전엔 `replace(/\s/g,"_")`(공백→밑줄)이라 M-SMART가 만든 실제
+  // 파일명과 어긋났다 — 설비ID에 공백/특수문자가 있으면 사진을 못 찾았다.
+  // Dashboard lib/photoNaming.js, events-tab.js와 같이 유지할 것.
+  const facilityId = String(ev.facility_id || "").replace(/[/\\?%*:|"<>\s]/g, "");
   for (let i = 1; i <= count; i++) {
     const fileName = `${dt.slice(0, 8)}_${dt.slice(8, 12)}_${facilityId}_${i}.jpg`;
     const path = `inspection_photos/${ev.center_name}/${fileName}`;
@@ -174,8 +178,15 @@ async function loadReportWorkbook() {
 
 // ==============================================================================
 // events 조회 — center_name(필수) + status(선택) + created_at 범위(YYYY-MM-DD, 선택)
-// ⚠️ center_name/status 동시 필터 + created_at range/orderBy 조합이라 Firestore 콘솔에서
-//   복합 색인을 요구할 수 있음 — 첫 실행 시 에러 메시지의 색인 생성 링크로 만들면 됨.
+//
+// 이 조합에 필요한 복합 색인 2개는 `firestore.indexes.json`에 등재되어 있고 CI가 함께
+// 배포한다 (events: center_name+created_at DESC / center_name+status+created_at DESC).
+//
+// ⚠️ [2026-07-29 정정] 여기엔 "첫 실행 시 에러 메시지의 색인 생성 링크로 만들면 됨"이라고
+//   적혀 있었는데, 그건 system_map.md 4번 체크리스트가 **명시적으로 금지한 절차**다 —
+//   링크로 만드는 사이 쿼리가 FAILED_PRECONDITION으로 조용히 실패하고, 이 저장소 계열에서
+//   실제로 그 사고가 여러 번 있었다. 새 쿼리를 추가하면 firestore.indexes.json에 먼저
+//   등재하고 배포한 뒤 코드를 내보낼 것.
 // ==============================================================================
 async function queryEvents({ center, status, start, end }) {
   let q = db.collection("events").where("center_name", "==", center);

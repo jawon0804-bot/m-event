@@ -27,19 +27,29 @@ service cloud.firestore {
 
     // events: 생성은 onInspectionLog 트리거(Admin SDK)만 함.
     // 상태 변경(조치중/완료)은 m-event 화면이 클라이언트에서 직접 update.
+    //
+    // ⚠️ [2026-07-29 수정] update가 `resource.data`(수정 **전** 값)만 보고 있었다.
+    //   그래서 자기 센터 이벤트를 수정하면서 center_name을 남의 센터로 바꿔 넘기면
+    //   그대로 통과했고, 그 문서는 우리 센터 화면에서 사라져 남의 센터로 넘어갔다.
+    //   (create는 처음부터 request.resource.data를 검사하고 있어서 update만 빠진 상태)
+    //   → center_name을 불변으로 고정한다. 클라이언트가 이 필드를 안 보내면
+    //     request.resource.data.center_name은 기존 값 그대로라 정상 동작에는 영향 없다.
     match /events/{doc} {
       allow read: if request.auth != null
         && (resource.data.center_name == request.auth.token.center_name
             || request.auth.token.center_name == "Master");
       allow update: if request.auth != null
         && (resource.data.center_name == request.auth.token.center_name
-            || request.auth.token.center_name == "Master");
+            || request.auth.token.center_name == "Master")
+        && request.resource.data.center_name == resource.data.center_name;
       allow create, delete: if false;
     }
 
     // UserDB: 이름/전화번호/이메일 PII. loginWithCredentials가 Admin SDK로만
-    // 조회하므로(functions/index.js:841) 클라이언트가 직접 읽을 이유가
+    // 조회하므로(functions/lib/auth.js) 클라이언트가 직접 읽을 이유가
     // 없음 — 완전 차단.
+    // (2026-07-29: 참조가 "functions/index.js:841"로 적혀 있었으나 07-11 리팩토링으로
+    //  index.js는 77줄짜리 진입점만 남았다 — 실제 위치는 lib/auth.js다)
     match /UserDB/{doc} {
       allow read, write: if false;
     }
@@ -79,9 +89,11 @@ service cloud.firestore {
       allow create: if request.auth != null
         && (request.resource.data.center_name == request.auth.token.center_name
             || request.auth.token.center_name == "Master");
+      // events와 같은 이유로 center_name을 불변 고정 (2026-07-29)
       allow update: if request.auth != null
         && (resource.data.center_name == request.auth.token.center_name
-            || request.auth.token.center_name == "Master");
+            || request.auth.token.center_name == "Master")
+        && request.resource.data.center_name == resource.data.center_name;
       allow delete: if false;
     }
     match /work_logs/{docId}/{sub=**} {

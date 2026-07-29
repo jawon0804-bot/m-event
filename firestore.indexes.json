@@ -1,0 +1,87 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "inspection_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "datetime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inspection_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "datetime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Maxerve_Excel",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "datetime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Maxerve_Excel",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "datetime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Maxerve_Excel",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "facility_id", "order": "ASCENDING" },
+        { "fieldPath": "datetime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "last_notified_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "center_name", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

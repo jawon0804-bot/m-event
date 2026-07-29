@@ -49,7 +49,20 @@ jobs:
           echo "배포 대상 함수 $(echo "$NAMES" | wc -l | tr -d ' ')개:"
           echo "$NAMES" | sed 's/^/  - /'
 
+      # ⚠️ [2026-07-29] 배포 대상에 firestore:indexes 와 storage 를 추가했다.
+      #
+      # 그동안 이 저장소가 배포하던 건 hosting + firestore:rules + functions 뿐이었고,
+      # **복합 인덱스와 Storage 규칙은 어느 저장소에도 없이 콘솔 상태로만 존재**했다.
+      # 그 결과 Storage 규칙이 `allow read, write: if true`(버킷 전체 공개)인 채로
+      # 2026-07-10부터 방치돼 있었는데도 코드 리뷰에 한 번도 걸리지 않았다.
+      #
+      # · firestore:indexes — firestore.indexes.json은 2026-07-29 시점의 실제 배포
+      #   상태(10개, 전부 READY)를 그대로 옮긴 것이라 첫 배포는 사실상 no-op이다.
+      #   여기 없는 인덱스를 지우지는 않으니, 삭제는 gcloud로 별도 수행할 것.
+      # · storage — storage.rules로 버킷 전체 개방을 닫는다. **첫 배포 직후 M-SMART에서
+      #   사진 첨부 점검을 1건 제출해 업로드가 되는지 반드시 확인할 것**(규칙이 틀리면
+      #   현장에서 storage/unauthorized로 나타난다).
       - name: Firebase 배포
-        run: firebase deploy --only hosting,firestore:rules,${{ steps.fnlist.outputs.list }} --token "${{ secrets.FIREBASE_TOKEN }}"
+        run: firebase deploy --only hosting,firestore:rules,firestore:indexes,storage,${{ steps.fnlist.outputs.list }} --token "${{ secrets.FIREBASE_TOKEN }}"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
