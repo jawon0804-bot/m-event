@@ -67,13 +67,19 @@ service firebase.storage {
     // read : 업로드 직후 getDownloadURL + m-event 화면의 사진 조회
     //        (manager/js/events-tab.js loadEventPhotos, manager/js/photo-tab.js)
     //
-    // ⚠️ delete를 막아둔 이유: 현장 점검 사진은 부정점검 방지 증빙이라 클라이언트가
+    // ⚠️ delete를 막는 이유: 현장 점검 사진은 부정점검 방지 증빙이라 클라이언트가
     //   지울 수 있으면 안 된다. 반면 update(덮어쓰기)는 **일부러 허용**한다 —
     //   오프라인 큐가 같은 파일명으로 재전송할 때(업로드는 됐는데 응답을 못 받은 경우)
     //   create만 허용하면 재시도가 영구히 거부되어 큐에 갇힌다.
+    //
+    // ⚠️⚠️ 반드시 `create, update`로 나열할 것. `write`는 create/update/**delete**를
+    //   전부 포함하는 상위 개념이고, 규칙의 allow 문들은 **OR로 결합**된다.
+    //   즉 `allow read, write: if ownsCenter(...)` 아래에 `allow delete: if false`를
+    //   덧붙여도 **삭제가 막히지 않는다** (앞 문장이 이미 허용하므로).
+    //   Firestore 규칙과 달리 Storage 규칙엔 허용을 되돌리는 deny가 없다.
     match /inspection_photos/{center}/{fileName} {
-      allow read, write: if ownsCenter(center);
-      allow delete: if false;
+      allow read, create, update: if ownsCenter(center);
+      // delete는 어떤 allow에도 없으므로 기본값(거부)이 적용된다.
     }
 
     // ── M-Engine이 생성한 점검표 엑셀 ─────────────────────────────
@@ -81,7 +87,7 @@ service firebase.storage {
     // storage_path를 getDownloadURL로 변환할 때 필요 (manager/js/excel-tab.js resolveExcelUrl).
     match /excel/{center}/{fileName} {
       allow read: if ownsCenter(center);
-      allow write, delete: if false;
+      allow write: if false;   // write = create/update/delete 전부 포함
     }
 
     // ── 근무일지 월별 엑셀 ───────────────────────────────────────
@@ -89,7 +95,7 @@ service firebase.storage {
     // 읽기는 근무일지 탭 다운로드 (manager/js/worklog.js의 연도별 12개월 조회).
     match /work_log/{center}/{fileName} {
       allow read: if ownsCenter(center);
-      allow write, delete: if false;
+      allow write: if false;   // write = create/update/delete 전부 포함
     }
 
     // ── 센터 템플릿 ──────────────────────────────────────────────
@@ -102,10 +108,12 @@ service firebase.storage {
     //   이번 변경은 "버킷 전체 개방"을 막는 게 목적이라 기존 의미를 바꾸지 않았다.
     //   센터 격리로 좁히려면 read를 ownsCenter(center)로 바꾸면 되는데, 그 전에
     //   Master가 아닌 관리자가 다른 센터 템플릿을 손대는 운영 흐름이 없는지 확인이 필요하다.
+    // `write` 대신 `create, update`로 나열해 삭제만 막는다 (위 inspection_photos 주석 참고 —
+    // `allow delete: if false`를 덧붙이는 방식은 OR 결합이라 동작하지 않는다).
+    // 근무일지 화면은 put()만 하므로 create/update로 충분하다.
     match /templates/{center}/{fileName} {
-      allow read:  if isSignedIn();
-      allow write: if isAdminOrMaster();
-      allow delete: if false;
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOrMaster();
     }
 
     // ── 서버 전용 산출물 ─────────────────────────────────────────
