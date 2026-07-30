@@ -69,7 +69,7 @@
         ↓
 Cloud Function(loginWithCredentials) 호출 — 판정은 전부 서버에서
         ↓
-UserDB에서 이름이 일치하는 사람을 최대 5명까지 조회
+UserDB에서 이름이 일치하는 사람을 최대 50명까지 조회 (`LOGIN_NAME_LOOKUP_LIMIT`)
         ↓
 그 중 전화번호가 "완전히 일치"해야 통과
         ↓
@@ -80,12 +80,25 @@ UserDB에서 이름이 일치하는 사람을 최대 5명까지 조회
 성공 시 Firebase Custom Token 발급 → 화면이 firebase.auth()로 진짜 로그인
 ```
 
-### 로그인 시도 기록용 컬렉션 2개 (둘 다 정상, 역할이 달라요)
+### 로그인 시도 기록용 컬렉션 3개 (전부 정상, 역할이 달라요)
 
 | 컬렉션 | 문서 단위 | 역할 |
 |---|---|---|
-| `login_attempts` | 시도할 때마다 새 문서 추가 (계속 누적) | 성공/실패/차단 관계없이 모든 시도 이력 기록 |
-| `login_lockouts` | **이름 단위로 문서 1개**, 계속 덮어씀 | 5회 실패 시 15분 잠금 상태만 관리 |
+| `login_attempts` | 시도할 때마다 새 문서 추가 (90일 TTL로 자동 삭제) | 성공/실패/차단 관계없이 모든 시도 이력 기록 |
+| `login_lockouts` | **이름 단위로 문서 1개**, 계속 덮어씀 | 5회 실패 시 15분 잠금 |
+| `login_lockouts_ip` | **IP 단위로 문서 1개**, 계속 덮어씀 | 20회 실패 시 15분 잠금 — 이름을 바꿔가며 시도해서 위 잠금을 우회하는 걸 막는 용도 |
+
+#### 그 IP는 어떻게 정하나 (2026-07-30 실측으로 확정)
+
+`X-Forwarded-For`는 **클라이언트가 보낸 값 + 인프라가 뒤에 덧붙인 진짜 IP** 순서로 쌓여요.
+그래서 **맨 뒤 항목만** 신뢰할 수 있어요. 예전 코드는 맨 앞을 썼는데, 그건 요청자가 헤더로
+아무 값이나 넣을 수 있는 값이라서 **IP 단위 잠금이 헤더 한 줄로 우회되던 상태**였어요.
+
+판정 근거(실제로 보낸 헤더 ↔ 함수가 받은 체인)와 재실측 방법은 [`functions/lib/net.js`](functions/lib/net.js) 주석에 있어요.
+
+> ⚠️ 이 판정은 **배포 형태에 의존해요.** 앞에 외부 로드밸런서나 CDN을 두면 덧붙는 항목 수가
+> 달라져서 다시 실측해야 해요(`TRUSTED_PROXY_HOPS`). 그때 필요한 원본 체인은
+> `login_attempts.xff_chain`에 계속 기록되고 있어요 — **이 필드는 지우지 마세요.**
 
 ### 세션 유지 방식도 바뀌었어요
 > ~~로그인에 성공하면 sessionStorage에 사용자 정보를 저장~~ → **이제는 진짜 Firebase Auth 세션을 씁니다.** `auth.onAuthStateChanged`가 새로고침/재방문 시 커스텀 클레임(`name`, `center_name`, `active`)에서 로그인 상태를 자동 복원해요. sessionStorage는 더 이상 안 씀.
@@ -204,6 +217,20 @@ codebase 프리픽스를 빼면 배포가 조용히 실패(silent abort)할 수 
 
 ### `firebase deploy --only functions` (전체 배포)는 금지
 같은 Firebase 프로젝트에 M-Event와는 무관한 별도 모니터링 함수(`collectMetrics`, `getDashboardData`, `us-central1`)가 같이 있어서, 전체 배포하면 이 함수들이 삭제 시도될 수 있고 M-Event 재배포로는 복구가 안 돼요. 항상 함수명을 명시해서 배포하세요.
+
+### 🧪 테스트 (`tests/`)
+
+전부 "실제로 배포됐던 버그"를 케이스로 굳혀둔 회귀 테스트예요. 그럴듯한 상식으로 되돌리는 걸 막는 게 목적입니다.
+
+| 파일 | 무엇을 검증 | 자격증명 | CI |
+|---|---|---|---|
+| `tests/client-ip.test.js` | 로그인 잠금이 쓰는 클라이언트 IP 판정 (XFF의 **맨 뒤** 항목) | 불필요 | ✅ 배포 전 자동 실행 |
+| `tests/storage-rules.test.js` | `storage.rules`를 실제 규칙 엔진(TestRuleset)에 돌려 22개 케이스 검증 | **gcloud 로그인 필요** | ❌ 수동 |
+
+```bash
+node tests/client-ip.test.js      # 아무 때나
+node tests/storage-rules.test.js  # storage.rules를 고쳤으면 배포 전 반드시
+```
 
 ---
 
@@ -398,9 +425,9 @@ M-Engine은 openpyxl로 파일을 만드는데, openpyxl은 그림(drawing) XML�
 | 분류 | 내용 |
 |---|---|
 | 프론트엔드 | 순수 HTML/CSS/JS (프레임워크 없음), 단일 파일 `index_M-Event.html` |
-| 백엔드 | Firebase Functions 2nd Gen (Node.js 22, `asia-northeast3`) — 자체 서버 없음, 설비 이름 표시만 Dashboard API에 의존 |
+| 백엔드 | Firebase Functions 2nd Gen (Node.js 22, `asia-northeast3`) — 자체 서버 없음. **다른 저장소 런타임 의존 0건** (2026-07-11에 Dashboard API 의존 해소) |
 | 인증 | Firebase Auth (Custom Token 발급 방식) + 커스텀 로그인 잠금 로직 |
-| 데이터베이스 | Firestore (`events`, `inspection_logs`, `UserDB`, `login_attempts`, `login_lockouts`, `Maxerve_Excel`, `settings/all_centers`, `work_logs`, `center_configs`) |
+| 데이터베이스 | Firestore (`events`, `inspection_logs`, `UserDB`, `login_attempts`, `login_lockouts`, `login_lockouts_ip`, `Maxerve_Excel`, `settings/all_centers`, `work_logs`, `center_configs`) |
 | 파일 저장소 | Firebase Storage (사진, 근무일지/출근부 템플릿, 이벤트 보고서 템플릿/결과물) |
 | 메일 발송 | Nodemailer + Gmail SMTP (Secret Manager로 인증정보 관리) |
 | 배포 | Firebase Hosting + Functions (GitHub Actions CI/CD) |
@@ -444,9 +471,9 @@ firebase functions:log --only onInspectionLog -n 50
 - Firestore 복합 인덱스(`status` + `last_notified_at`)가 없으면 쿼리 자체가 조용히 실패할 수 있음 — 콘솔에 뜨는 인덱스 생성 링크로 생성
 
 ### 설비 이름이 ID로만 표시돼요 (이름이 안 보여요)
-- m-event는 자체 서버가 없고 **Dashboard(facility-dashboard)의 `/api/fidlocations`를 빌려 씀**
-- Dashboard 서비스가 죽어있거나, 그 API 경로/응답 형식이 바뀌면 m-event의 이름 표시 기능 전체가 영향받음
-- 확인 순서: Dashboard Cloud Run 서비스 상태 → `/api/fidlocations` 응답 형식 → m-event 콘솔 에러 로그
+- **Dashboard와는 무관해요** (2026-07-11부터). 화면이 Firestore를 직접 읽어요 — `center_configs/{center}/facilities`의 `fid_name`(설비 위치명)과 `center_configs/{center}/inspections`(점검표 라벨), `manager/js/auth.js`의 `loadFidLocations()`
+- 확인 순서: 그 센터의 위 두 서브컬렉션에 문서가 있는지 → 브라우저 콘솔 에러 → `firestore.rules`의 `center_configs` 읽기 권한(본인 센터/Master만)
+- ⚠️ 이 항목엔 2026-07-30까지 "Dashboard의 `/api/fidlocations`를 빌려 씀"이라고 적혀 있었어요. 07-11에 의존이 사라졌는데 문서만 남아 있던 것 — 장애 시 엉뚱한 곳(Dashboard 상태)부터 보게 만드는 오차였어요
 
 ### 로그인이 이상해요 (잠기거나, 다른 센터인데 같이 잠김)
 - `login_lockouts`는 **이름 단위로 공유**되는 게 정상 설계예요 — 다른 센터라도 이름이 같으면 같은 잠금 문서를 씀 (의도된 동작)
@@ -459,4 +486,4 @@ firebase functions:log --only onInspectionLog -n 50
 
 ### 외부 요인으로 멈출 수 있는 지점
 - **Gmail 앱 비밀번호 만료** (Google 보안 정책 갱신, 2단계 인증 재설정 등으로 예고 없이 무효화될 수 있음) → 메일 발송 전체 중단. 분기별 점검 습관 권장
-- Dashboard 서비스 장애 시 m-event의 설비 이름 표시 기능도 같이 영향받음 (위 의존 관계 참고)
+- ~~Dashboard 서비스 장애 시 m-event의 설비 이름 표시 기능도 같이 영향받음~~ → **해당 없음** (2026-07-11에 의존 해소, 위 "Dashboard 호출 0건" 절 참고)

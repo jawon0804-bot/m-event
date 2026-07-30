@@ -17,6 +17,7 @@
 //       request.auth.token.center_name 으로 실제 접근 제어에 쓸 수 있게 함 — 규칙은 별도 작업 필요)
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { admin, db } = require("./firebase");
+const { clientIp, rawXffChain } = require("./net");
 const {
   LOGIN_MAX_ATTEMPTS,
   LOGIN_LOCKOUT_MINUTES,
@@ -90,10 +91,11 @@ async function logLoginAttempt({ name, phone, ip, xffChain, userAgent, success, 
       success, blocked,
       ip, user_agent: userAgent,
       // [2026-07-27 추가] X-Forwarded-For 원본 체인 전체.
-      // 아래 ip 추출부의 미해결 질문(어느 항목이 신뢰 가능한 클라이언트 IP인가)을
-      // 실제 트래픽으로 판정하기 위한 진단용 필드다. 정상 로그인 몇 건만 쌓이면
-      // 항목이 몇 개이고 마지막이 무엇인지 확인할 수 있다. 판정 후에는 이 필드를
-      // 없애도 되고, 포렌식 용도로 남겨도 된다(login_attempts는 90일 TTL 적용 중).
+      // "어느 항목이 신뢰 가능한 클라이언트 IP인가"를 판정하려고 넣은 진단용 필드이고,
+      // 2026-07-30에 이 필드로 판정을 끝냈다(맨 뒤 항목 = 진짜 IP, lib/net.js 참고).
+      // 판정이 끝났어도 **지우지 말 것** — 앞에 LB/CDN을 두는 등 배포 형태가 바뀌면
+      // 홉 수를 다시 실측해야 하고, 그때 필요한 게 이 원본 체인이다.
+      // (login_attempts는 90일 TTL 적용 중이라 무한히 쌓이지는 않는다)
       xff_chain: xffChain || "",
       at: admin.firestore.FieldValue.serverTimestamp(),
       // [2026-07-11 추가] Firestore TTL 정책 대상 필드 — expireAt이 지나면
@@ -128,19 +130,13 @@ function isAppAllowed(userData, appId) {
 exports.loginWithCredentials = onCall(async (request) => {
   const { name, phone, app /*, password (향후 확장) */ } = request.data || {};
   const rawRequest = request.rawRequest;
-  // ⚠️ [2026-07-27 미해결] IP 잠금의 신뢰성 문제 — 아직 동작을 바꾸지 않았음.
-  // X-Forwarded-For는 "클라이언트가 보낸 값들, 인프라가 덧붙인 값들" 순서로 쌓이고,
-  // GCP LB/Cloud Run은 클라이언트가 임의로 넣은 XFF를 지우지 않고 뒤에 덧붙인다.
-  // 그렇다면 아래 [0]은 공격자가 매 요청마다 바꿔 넣을 수 있는 값이므로,
-  // 2026-07-11에 이름 단위 잠금 우회를 막기 위해 넣은 IP 단위 잠금이 헤더 하나로
-  // 무력화된다.
-  // 다만 단순히 "마지막 항목"으로 바꾸는 건 더 위험할 수 있다 — 배포 형태에 따라
-  // 마지막이 Google LB IP라면 모든 요청이 같은 키로 합산되어 전체 사용자 로그인을
-  // 막는 사실상의 전역 잠금이 된다(constants.js가 DoS 위험 때문에 일부러 피한 것).
-  // 그래서 추측으로 바꾸지 않고, 위 logLoginAttempt에 xff_chain(원본 전체)을 기록해
-  // 실제 트래픽으로 항목 구성을 확인한 뒤 올바른 인덱스를 고정하기로 함.
-  const xffChain = String(rawRequest?.headers?.["x-forwarded-for"] || "");
-  const ip = xffChain.split(",")[0].trim() || rawRequest?.ip || "";
+  // [2026-07-30] IP 판정을 lib/net.js로 옮겼다. 예전엔 여기서 XFF의 **맨 앞** 항목을
+  // 썼는데, 실측 결과 앞쪽 항목은 클라이언트가 헤더로 아무 값이나 넣을 수 있는 값이었고
+  // 진짜 IP는 인프라가 덧붙이는 **맨 뒤** 항목이었다. 즉 IP 단위 잠금(2026-07-11에
+  // 이름 단위 잠금 우회를 막으려고 넣은 것)이 헤더 한 줄로 무력화되는 상태였다.
+  // 판정 근거·재실측 방법·배포 형태 의존성은 lib/net.js 주석에 전부 적어뒀다.
+  const xffChain = rawXffChain(rawRequest);
+  const ip = clientIp(rawRequest);
   const userAgent = rawRequest?.headers?.["user-agent"] || "";
 
   const cleanName  = String(name || "").trim();

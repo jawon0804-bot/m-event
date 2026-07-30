@@ -18,6 +18,14 @@ jobs:
         run: npm install
         working-directory: functions
 
+      # [2026-07-30 추가] 자격증명이 필요 없는 순수 로직 테스트만 배포 전에 돌린다.
+      # 실패하면 배포가 멈춘다 — 여기 있는 케이스는 실제로 배포됐던 버그를 굳혀둔 것이라
+      # "그럴듯하게 고쳐서" 되돌리는 걸 막는 게 목적이다.
+      # (tests/storage-rules.test.js는 GCP 자격증명이 필요해서 CI에서 안 돌린다 —
+      #  storage.rules를 고쳤으면 로컬에서 수동으로 돌릴 것. 그 파일 상단 주석 참고)
+      - name: 회귀 테스트 (자격증명 불필요)
+        run: node tests/client-ip.test.js
+
       # ────────────────────────────────────────────────────────────────
       # 배포 대상 함수 목록을 functions/index.js의 exports에서 자동 생성한다.
       #
