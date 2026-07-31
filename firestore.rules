@@ -16,9 +16,18 @@ service cloud.firestore {
     // inspection_logs: M-SMART가 브라우저에서 직접 씀, m-event가 읽음.
     // 로그인 필수 + 자기 센터 데이터만 쓰기/읽기 (Master는 전체 열람).
     // 수정/삭제는 클라이언트에서 불가 — 필요하면 Admin SDK/Functions만.
+    // ⚠️ [2026-08-01 추가] worker(작업자 이름)를 토큰 클레임과 대조한다.
+    //   예전엔 center_name만 봤다. worker는 M-SMART가 localStorage의 userName을
+    //   그대로 넣는 값이라, 그걸 바꾸면 **남의 이름으로 점검 기록을 만들 수 있었다.**
+    //   토큰의 name은 loginWithCredentials가 서버에서 심는 값이라 위조가 안 된다.
+    //   부정점검 방지 수단으로 위치(location)를 기록해왔는데 2026-08-01에 속도
+    //   문제로 그걸 껐기 때문에, 작업자 신원 검증의 비중이 그만큼 커졌다.
+    //   → M-SMART submit.js가 이 규칙보다 **먼저** 토큰 기반 worker를 보내도록
+    //     배포됐다(커밋 순서 중요 — 반대로 하면 제출이 막혀 오프라인 큐에 갇힌다).
     match /inspection_logs/{doc} {
       allow create: if request.auth != null
-        && request.resource.data.center_name == request.auth.token.center_name;
+        && request.resource.data.center_name == request.auth.token.center_name
+        && request.resource.data.worker == request.auth.token.name;
       allow read: if request.auth != null
         && (resource.data.center_name == request.auth.token.center_name
             || request.auth.token.center_name == "Master");
@@ -75,9 +84,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // settings/all_centers: Master 센터 드롭다운 등에 쓰임. 로그인만 하면 열람 가능.
+    // settings/all_centers: 전체 센터 이름 목록. Master 화면의 센터 드롭다운에만 쓰인다.
+    //
+    // ⚠️ [2026-08-01 축소] 예전엔 `if request.auth != null`이라 **소속과 무관하게
+    //   로그인만 하면 전 센터 목록이 열렸다.** 실제로 이 값을 쓰는 곳은 manager/js/auth.js의
+    //   buildCenterFilters()뿐이고, 거기서도 isMaster일 때만 드롭다운에 채운다
+    //   (일반 사용자는 자기 센터 하나로 고정). 그래서 Master로 좁혀도 기능 변화가 없다.
+    //   같은 커밋에서 클라이언트도 Master가 아니면 아예 조회하지 않도록 바꿨다.
+    //   M-Engine·Functions는 Admin SDK라 이 규칙을 우회하므로 영향 없다.
     match /settings/{doc=**} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null
+        && request.auth.token.center_name == "Master";
       allow write: if false;
     }
 
@@ -96,6 +113,16 @@ service cloud.firestore {
         && request.resource.data.center_name == resource.data.center_name;
       allow delete: if false;
     }
+    // 하위 컬렉션(dayWork/dayCheck/nightWork/nightNote/legal/material)이 근무일지의
+    // 실제 내용이다. 부모 문서는 delete가 막혀 있는데 여기는 write(=create/update/delete)로
+    // 열려 있어 **비대칭으로 보이지만 이건 의도된 설계다.**
+    //
+    // ✅ [2026-08-01 확인] 삭제를 막으려다 확인해보니 화면이 실제로 이 delete를 쓴다 —
+    //   manager/js/worklog.js의 wlDeleteLine()("이 줄을 삭제하시겠습니까?"). 즉
+    //   **줄 단위 삭제는 정상 기능**이고, 규칙을 조이면 그 기능이 깨진다.
+    //   의미도 일관적이다: 자기 센터 근무일지의 줄은 고치고 지울 수 있지만,
+    //   그 날짜 문서 자체를 통째로 없애지는 못한다.
+    //   → 손대지 말 것. "비대칭이니 막자"는 판단은 기능을 깨뜨린다.
     match /work_logs/{docId}/{sub=**} {
       allow read, write: if request.auth != null
         && (get(/databases/$(database)/documents/work_logs/$(docId)).data.center_name == request.auth.token.center_name

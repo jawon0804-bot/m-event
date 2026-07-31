@@ -128,12 +128,18 @@ async function showApp() {
 async function buildCenterFilters() {
   const isMaster = currentUser.center_name === "Master";
 
-  // 센터 목록 조회
+  // 센터 목록 조회 — Master만 필요하다.
+  // [2026-08-01] 예전엔 소속과 무관하게 항상 조회했는데, 아래를 보면 centers는
+  // isMaster일 때만 쓰인다(일반 사용자는 자기 센터 하나로 고정). 쓰지도 않는 값을
+  // 받으려고 전 센터 목록을 읽던 셈이라, firestore.rules에서 이 문서를 Master로
+  // 좁히면서 클라이언트도 같이 정리했다.
   let centers = [];
-  try {
-    const doc = await db.collection("settings").doc("all_centers").get();
-    if (doc.exists) centers = (doc.data().centers || []).sort();
-  } catch(e) { console.warn("센터 목록 조회 실패:", e); }
+  if (isMaster) {
+    try {
+      const doc = await db.collection("settings").doc("all_centers").get();
+      if (doc.exists) centers = (doc.data().centers || []).sort();
+    } catch(e) { console.warn("센터 목록 조회 실패:", e); }
+  }
 
   // 이벤트 탭 센터 드롭다운
   const eventSel = document.getElementById("filter-center-event");

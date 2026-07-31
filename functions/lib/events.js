@@ -4,6 +4,9 @@ const { onDocumentWritten, onDocumentUpdated } = require("firebase-functions/v2/
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { admin, db, GMAIL_USER, GMAIL_PASS } = require("./firebase");
 const { sendMail, makeEmailHtml, getAdminEmails } = require("./mail");
+// [2026-08-01] 메일 링크 주소를 상수로 모음. 예전엔 아래 세 곳에 같은 URL이
+// 하드코딩돼 있어서, 도메인을 바꾸면 메일은 정상 발송되는데 링크만 조용히 깨졌다.
+const { EVENT_BASE_URL } = require("../config/constants");
 
 // ==============================================================================
 // [트리거 1] inspection_logs 문서 생성/수정 감지 (2nd Gen: onDocumentWritten)
@@ -79,7 +82,7 @@ exports.onInspectionLog = onDocumentWritten(
     console.log("[이슈 생성 완료]", eventRef.id);
 
     const adminEmails = await getAdminEmails(center_name);
-    const eventUrl = `https://m-smart-0804.web.app/index.html?id=${eventRef.id}`;
+    const eventUrl = `${EVENT_BASE_URL}?id=${eventRef.id}`;
     await sendMail(
       adminEmails,
       `[이벤트 발생] ${center_name} - ${facility_id} - ${memo}`,
@@ -104,7 +107,7 @@ exports.onIssueUpdate = onDocumentUpdated(
     const memo     = after.memo || "";
     const datetime = after.datetime || "";
     const eventId  = event.params.eventId;
-    const eventUrl = `https://m-smart-0804.web.app/index.html?id=${eventId}`;
+    const eventUrl = `${EVENT_BASE_URL}?id=${eventId}`;
     const adminEmails = await getAdminEmails(center_name);
     const lastHistory = (after.history || []).slice(-1)[0] || {};
 
@@ -159,7 +162,7 @@ exports.issueReminderScheduler = onSchedule(
       const memo   = issue.memo || "";
       const status = issue.status || "";
       const count  = (issue.notified_count || 0) + 1;
-      const eventUrl = `https://m-smart-0804.web.app/index.html?id=${doc.id}`;
+      const eventUrl = `${EVENT_BASE_URL}?id=${doc.id}`;
       const adminEmails = await adminEmailsFor(center_name);
 
       const ok = await sendMail(

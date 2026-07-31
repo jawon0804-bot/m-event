@@ -24,7 +24,9 @@ jobs:
       # (tests/storage-rules.test.js는 GCP 자격증명이 필요해서 CI에서 안 돌린다 —
       #  storage.rules를 고쳤으면 로컬에서 수동으로 돌릴 것. 그 파일 상단 주석 참고)
       - name: 회귀 테스트 (자격증명 불필요)
-        run: node tests/client-ip.test.js
+        run: |
+          node tests/client-ip.test.js
+          node tests/expected-count.test.js
 
       # ────────────────────────────────────────────────────────────────
       # 배포 대상 함수 목록을 functions/index.js의 exports에서 자동 생성한다.

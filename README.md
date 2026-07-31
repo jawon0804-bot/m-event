@@ -245,12 +245,19 @@ M-SMART에서 이 때문에 버그 수정이 기기에 안 닿는 일이 실제�
 | 파일 | 무엇을 검증 | 자격증명 | CI |
 |---|---|---|---|
 | `tests/client-ip.test.js` | 로그인 잠금이 쓰는 클라이언트 IP 판정 (XFF의 **맨 뒤** 항목) | 불필요 | ✅ 배포 전 자동 실행 |
+| `tests/expected-count.test.js` | 월간 집계 기대 횟수 — **M-Engine(Python)과 같은 케이스 표** | 불필요 | ✅ 배포 전 자동 실행 |
 | `tests/storage-rules.test.js` | `storage.rules`를 실제 규칙 엔진(TestRuleset)에 돌려 22개 케이스 검증 | **gcloud 로그인 필요** | ❌ 수동 |
 
 ```bash
-node tests/client-ip.test.js      # 아무 때나
-node tests/storage-rules.test.js  # storage.rules를 고쳤으면 배포 전 반드시
+node tests/client-ip.test.js       # 아무 때나
+node tests/expected-count.test.js  # 아무 때나
+node tests/storage-rules.test.js   # storage.rules를 고쳤으면 배포 전 반드시
 ```
+
+> ⚠️ **`expected-count.test.js`의 케이스 표는 `M-Engine/tests/test_schedule_dates.py`의
+> `EXPECTED_COUNT_CASES`와 글자 그대로 같아야 해요.** 같은 계산이 두 언어로 두 벌 있어서
+> (메일은 Python, 화면은 JS) 한쪽만 고치면 숫자가 조용히 갈립니다. 한쪽 표를 고치면 반드시
+> 다른 쪽도 같이 고치세요.
 
 ---
 
