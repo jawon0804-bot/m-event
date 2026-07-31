@@ -218,6 +218,26 @@ codebase 프리픽스를 빼면 배포가 조용히 실패(silent abort)할 수 
 ### `firebase deploy --only functions` (전체 배포)는 금지
 같은 Firebase 프로젝트에 M-Event와는 무관한 별도 모니터링 함수(`collectMetrics`, `getDashboardData`, `us-central1`)가 같이 있어서, 전체 배포하면 이 함수들이 삭제 시도될 수 있고 M-Event 재배포로는 복구가 안 돼요. 항상 함수명을 명시해서 배포하세요.
 
+### 🗂️ 배포한 코드가 화면에 안 반영될 때 — 캐시 헤더 (2026-08-01)
+
+`firebase.json`에 헤더 설정이 없으면 Firebase Hosting이 기본으로 `Cache-Control: max-age=3600`을
+붙여요. 그러면 **배포한 뒤에도 최대 1시간 동안 브라우저가 옛 js/css를 그대로 씁니다.**
+M-SMART에서 이 때문에 버그 수정이 기기에 안 닿는 일이 실제로 있었고(2026-08-01), m-event도
+같은 상태였기에 같이 넣었어요.
+
+```json
+"headers": [
+  { "source": "**/*.@(js|css|html)",
+    "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+]
+```
+
+`no-cache`는 "캐시 금지"가 아니라 **"쓰기 전에 서버에 확인"**이에요. 안 바뀌었으면 304가 오니까
+트래픽 부담은 거의 없고, 바뀌었으면 바로 새 코드가 내려가요.
+
+> ⏱️ 이 설정은 **앞으로 받는 응답**에만 적용돼요. 이미 `max-age=3600`으로 받아간 브라우저는
+> 그 시간이 지나야 새로 받습니다. 당장 확인하려면 강력 새로고침(Ctrl+Shift+R)을 쓰세요.
+
 ### 🧪 테스트 (`tests/`)
 
 전부 "실제로 배포됐던 버그"를 케이스로 굳혀둔 회귀 테스트예요. 그럴듯한 상식으로 되돌리는 걸 막는 게 목적입니다.
