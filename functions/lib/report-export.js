@@ -18,6 +18,7 @@ const ExcelJS = require("exceljs");
 const { admin, db, bucket } = require("./firebase");
 const { getKstDateParts } = require("./dateUtils");
 const { fixSheetPrOrder } = require("./excel-utils");
+const { isMaster: isMasterOf, isAdmin } = require("./permissions");
 const {
   REPORT_TEMPLATE_PATH, REPORT_TEMPLATE_SHEET, REPORT_DATA_START_ROW,
   REPORT_MAX_ROWS, REPORT_PHOTO_SIZE_PX, REPORT_STATUS_COLOR,
@@ -315,9 +316,14 @@ async function writeReportBuffer(wb) {
 exports.generateEventReport = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   const claims = request.auth.token;
-  const isMaster = claims.center_name === "Master";
-  const isAdminOrMaster = claims.active === true || isMaster;
-  if (!isAdminOrMaster) throw new HttpsError("permission-denied", "권한이 없습니다.");
+  const isMaster = isMasterOf(claims);
+  // [2026-08-01] `claims.active === true || isMaster` → lib/permissions.js의 isAdmin으로 통일.
+  //   · 옛 토큰(role 없음)은 그 안의 폴백이 active로 판정하므로 재로그인 전에도 안 깨진다.
+  //   · **Master를 OR로 묶지 않는다** — 묶으면 center_name이 '범위'와 '권한'을 겸하게 되어
+  //     "전 센터를 열람하되 보고서는 만들지 않는 계정"을 표현할 수 없다. Master 계정도
+  //     보고서를 만들려면 UserDB에 role:"admin"이 있어야 한다(전환기엔 폴백이 통과시킴).
+  //   아래 isMaster는 권한이 아니라 **어느 센터를 대상으로 할지**를 정하는 데만 쓴다.
+  if (!isAdmin(claims)) throw new HttpsError("permission-denied", "권한이 없습니다.");
 
   const { center, status, start, end } = request.data || {};
   if (!start || !end) throw new HttpsError("invalid-argument", "조회 기간을 입력하세요.");
@@ -418,9 +424,8 @@ exports.eventReportMonthlyExport = onSchedule(
 exports.listEventReportFiles = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   const claims = request.auth.token;
-  const isMaster = claims.center_name === "Master";
-  const isAdminOrMaster = claims.active === true || isMaster;
-  if (!isAdminOrMaster) throw new HttpsError("permission-denied", "권한이 없습니다.");
+  const isMaster = isMasterOf(claims);
+  if (!isAdmin(claims)) throw new HttpsError("permission-denied", "권한이 없습니다.");
 
   const { center } = request.data || {};
   const targetCenter = center || (!isMaster ? claims.center_name : "");

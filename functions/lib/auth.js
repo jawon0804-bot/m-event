@@ -18,6 +18,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { admin, db } = require("./firebase");
 const { clientIp, rawXffChain } = require("./net");
+const { isActiveAccount } = require("./permissions");
 const {
   LOGIN_MAX_ATTEMPTS,
   LOGIN_LOCKOUT_MINUTES,
@@ -25,6 +26,7 @@ const {
   IP_LOCKOUT_MINUTES,
   LOGIN_ATTEMPT_RETENTION_DAYS,
   LOGIN_NAME_LOOKUP_LIMIT,
+  ENFORCE_ACTIVE_LOGIN,
 } = require("../config/constants");
 
 // 로그인 시도 결과를 잠금 문서에 원자적으로 반영 (동시 요청 레이스 방지)
@@ -206,6 +208,16 @@ exports.loginWithCredentials = onCall(async (request) => {
     matched = null;
   }
 
+  // [2026-08-01 추가] 비활성 계정 차단 — 기본값 false라 켜기 전까지는 동작이 안 바뀐다.
+  // 켜는 조건과 순서는 config/constants.js의 ENFORCE_ACTIVE_LOGIN 주석 참고.
+  // 위 앱 권한 검사와 같은 방식(로그인 실패로 통일)으로 처리하는 이유는 "계정이 존재하는데
+  // 비활성"과 "아예 없음"을 응답으로 구분할 수 없게 하기 위함 — Dashboard /api/login이
+  // 같은 이유로 두 경우의 메시지를 통일해둔 것과 같은 방침이다.
+  if (ENFORCE_ACTIVE_LOGIN && matched && !isActiveAccount(matched.data())) {
+    console.warn(`[로그인] ${cleanName}은(는) 비활성 계정(active:false)이라 로그인 거부`);
+    matched = null;
+  }
+
   // [향후 확장 지점] UserDB 문서에 password_hash 필드가 생기면 여기서 비밀번호 검증 추가.
   // 지금은 어떤 계정도 password_hash가 없어 이 분기는 타지 않음 — 이름+전화번호만으로 통과.
   // 도입 시: functions/package.json에 "bcryptjs" 추가 후
@@ -238,20 +250,41 @@ exports.loginWithCredentials = onCall(async (request) => {
     throw new HttpsError("unauthenticated", `이름 또는 전화번호가 일치하지 않습니다.${leftMsg}`);
   }
 
-  // 5) 성공 — Custom Token 발급 (커스텀 클레임에 center_name/active/name/apps 포함)
+  // 5) 성공 — Custom Token 발급 (커스텀 클레임에 center_name/role/active/name/apps 포함)
+  //
+  // ⚠️ [2026-08-01] role을 클레임에 추가했다. 이 클레임을 읽는 곳이 이 저장소 밖에도 있다:
+  //   · m-event  manager/js/auth.js (보고서 탭 표시), firestore.rules, storage.rules
+  //   · M-SMART  로그인 후 센터 판정
+  //   · Dashboard 프런트 → 자기 서버 /api/login (다만 서버는 UserDB를 직접 다시 읽는다)
+  // 클레임은 **토큰을 새로 받기 전까지 갱신되지 않는다.** 이미 로그인해 있는 사람은
+  // 재로그인 전까지 role이 없는 옛 토큰을 들고 다니므로, 읽는 쪽은 전부
+  // lib/permissions.js의 폴백(role 없으면 active)을 거쳐야 한다. 직접 비교하지 말 것.
+  //
+  // active는 클레임에 계속 싣는다 — 폴백이 이 값을 보기 때문이다. 백필이 끝나고
+  // 폴백을 지울 때 같이 정리할 것.
   const userData = matched.data();
-  const token = await admin.auth().createCustomToken(matched.id, {
+  const customClaims = {
     name: userData.name || cleanName,
     center_name: userData.center_name || "",
     active: userData.active === true,
     apps: userData.allowed_apps || null, // null이면 "전체 허용" 의미 (isAppAllowed와 동일 규칙)
-  });
+  };
+  // ⚠️ role은 **값이 있을 때만** 넣는다. `role: null`로 넣으면 안 된다 —
+  //   보안 규칙(storage.rules)이 `request.auth.token.get("role", "")`로 읽는데,
+  //   키가 null인 채로 존재하면 기본값 ""가 아니라 null이 나와서 폴백 분기
+  //   (role이 없으면 active로 판정)가 통째로 빗나간다. 그러면 백필 전 사용자가
+  //   템플릿 업로드 권한을 잃는다. apps는 null 자체가 "전체 허용"이라는 의미를
+  //   가지므로(위 isAppAllowed와 같은 규칙) 그쪽은 그대로 둔다.
+  if (userData.role) customClaims.role = userData.role;
+
+  const token = await admin.auth().createCustomToken(matched.id, customClaims);
 
   return {
     token,
     user: {
       name: userData.name || cleanName,
       center_name: userData.center_name || "",
+      role: userData.role || null,
       active: userData.active === true,
       email: userData.email || "",
       allowed_apps: userData.allowed_apps || null,

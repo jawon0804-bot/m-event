@@ -22,6 +22,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const ExcelJS = require("exceljs");
 const { db, bucket } = require("./firebase");
 const { cloneSheet, fixSheetPrOrder, loadWorkbookTolerant } = require("./excel-utils");
+const { isMaster: isMasterOf, isAdmin } = require("./permissions");
 const {
   EXCEL_MERGE_MAX_FILES,
   EXCEL_MERGE_DOWNLOAD_CONCURRENCY,
@@ -170,9 +171,9 @@ async function mapWithConcurrency(items, limit, fn) {
 exports.mergeExcelFiles = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   const claims = request.auth.token;
-  const isMaster = claims.center_name === "Master";
-  const isAdminOrMaster = claims.active === true || isMaster;
-  if (!isAdminOrMaster) throw new HttpsError("permission-denied", "권한이 없습니다.");
+  const isMaster = isMasterOf(claims);
+  // Master를 OR로 묶지 않는 이유는 report-export.js의 같은 자리 주석 참고.
+  if (!isAdmin(claims)) throw new HttpsError("permission-denied", "권한이 없습니다.");
 
   const { center, start, end, ids } = request.data || {};
 

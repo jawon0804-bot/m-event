@@ -2,6 +2,7 @@
 // 이메일 발송 관련 유틸 (Gmail 인증, 관리자 이메일 조회, 발송, 본문 템플릿)
 const nodemailer = require("nodemailer");
 const { db, GMAIL_USER, GMAIL_PASS } = require("./firebase");
+const { shouldReceiveMail } = require("./permissions");
 
 // ==============================================================================
 // [유틸] Gmail 인증 정보 (Secret Manager)
@@ -24,14 +25,34 @@ function nl2br(s) { return escHtml(s).replace(/\n/g, "<br>"); }
 
 // ==============================================================================
 // [유틸] 센터 관리자 이메일 목록 조회
+//
+// ⚠️ [2026-08-01] 필터를 쿼리에서 코드로 옮겼다. 예전엔
+//   `.where("center_name","==",c).where("active","==",true)` 였는데, 여기에
+//   notify_email 조건까지 등호로 더하면 두 가지 문제가 생긴다:
+//     ① 등호 3개면 Firestore 복합 인덱스가 필요해진다.
+//     ② 더 나쁜 건, **필드가 없는 문서는 `== true` 쿼리에 아예 안 걸린다.**
+//        백필을 한 명이라도 빠뜨리면 그 사람에게 알림이 조용히 끊기고 에러도 안 난다.
+//        알림 시스템에서 제일 나쁜 실패 모드다.
+//   UserDB는 관리자가 수동 등록하는 작은 컬렉션(2026-08-01 기준 9개 문서)이라
+//   센터 단위로 받아서 메모리에서 거르는 비용이 무시할 수준이다.
+//   → 판정 규칙은 lib/permissions.js의 shouldReceiveMail() 한 곳에만 둔다.
+//     (활성 계정 + 관리자 + 수신 거부 안 함. 값이 없으면 수신 쪽으로 fail-open)
+//
+// 📌 Master 계정은 여기서 자연히 제외된다 — center_name 정확일치라 "Master"는 어느
+//   센터 쿼리에도 안 걸린다. **의도된 동작이다**(2026-08-01 결정). 전 센터 관리자가
+//   센터별 개별 알림을 전부 받으면 노이즈가 되기 때문. 이 함수의 조회 범위를 나중에
+//   바꾸더라도 Master에게 전 센터 알림이 쏟아지지 않도록 유지할 것.
 // ==============================================================================
 async function getAdminEmails(center_name) {
   try {
     const snap = await db.collection("UserDB")
       .where("center_name", "==", center_name)
-      .where("active", "==", true)
       .get();
-    return snap.docs.map(d => d.data().email).filter(Boolean);
+    return snap.docs
+      .map(d => d.data())
+      .filter(shouldReceiveMail)
+      .map(u => u.email)
+      .filter(Boolean);
   } catch (e) {
     console.error("관리자 이메일 조회 실패:", e);
     return [];

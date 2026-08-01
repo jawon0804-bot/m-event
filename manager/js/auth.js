@@ -34,8 +34,27 @@ function logout() {
   auth.signOut(); // onAuthStateChanged(null)이 이어서 로그인 화면 전환 처리
 }
 
+// ==============================================================================
+// [권한 판정] functions/lib/permissions.js 의 규칙을 브라우저에서 그대로 쓴 것.
+//
+// ⚠️ 프런트엔드는 script 태그로 로드되어 require가 없어서 서버 모듈을 못 가져온다.
+//   규칙을 바꾸면 functions/lib/permissions.js(그리고 Dashboard·M-Engine의 사본)도
+//   같이 고칠 것. 참고로 **여기서 막는 건 화면 표시일 뿐**이고 실제 권한은 서버
+//   (Callable Function)와 storage.rules가 검사한다 — 이 함수를 우회해도 데이터는 못 얻는다.
+//
+// [전환기 폴백] role이 없으면 예전 의미(active === true)로 판정한다. 커스텀 클레임은
+//   **토큰을 새로 받기 전까지 갱신되지 않아서**, 이미 로그인해 있는 사람은 재로그인
+//   전까지 role 없는 옛 토큰을 들고 다닌다. 폴백이 없으면 그 사람들의 보고서 탭이
+//   재로그인할 때까지 사라진다. 백필 완료 후 폴백만 지우면 된다.
+// ==============================================================================
+function userIsAdmin(u) {
+  if (!u) return false;
+  if (typeof u.role === "string" && u.role !== "") return u.role === "admin";
+  return u.active === true;              // [전환기 폴백] — 백필 완료 후 제거
+}
+
 // 새로고침/재방문 시 Firebase Auth가 세션을 자체 관리 (sessionStorage 더 이상 불필요).
-// 커스텀 클레임(name/center_name/active)에서 currentUser를 복원함.
+// 커스텀 클레임(name/center_name/role/active)에서 currentUser를 복원함.
 auth.onAuthStateChanged(async (fbUser) => {
   if (fbUser) {
     if (!currentUser) {
@@ -44,6 +63,7 @@ auth.onAuthStateChanged(async (fbUser) => {
         currentUser = {
           name: idTokenResult.claims.name || "",
           center_name: idTokenResult.claims.center_name || "",
+          role: idTokenResult.claims.role || null,   // 없으면 아래 폴백이 active를 본다
           active: idTokenResult.claims.active === true,
         };
         showApp();
@@ -114,11 +134,15 @@ async function showApp() {
   const centerLabel = currentUser.center_name === "Master" ? "마스터 (전체)" : currentUser.center_name;
   document.getElementById("header-user").textContent = `${currentUser.name} · ${centerLabel}`;
 
-  // 보고서 탭 관리자/Master만 표시
-  const isAdminOrMaster = currentUser.active === true || currentUser.center_name === "Master";
-  document.getElementById("tab-report").style.display = isAdminOrMaster ? "flex" : "none";
-  document.getElementById("wl-attendance-pick-btn").style.display = isAdminOrMaster ? "inline-block" : "none";
-  document.getElementById("wl-attendance-hint").style.display = isAdminOrMaster ? "flex" : "none";
+  // 보고서 탭·출근부 업로드는 관리자만 표시.
+  // ⚠️ [2026-08-01] 예전엔 `active === true || center_name === "Master"`였다. Master를 OR로
+  //   묶지 않는 이유는 서버(functions/lib/report-export.js)의 같은 자리 주석 참고 —
+  //   서버가 role만 보고 거절하므로, 여기서 Master에게 탭을 보여주면 눌렀을 때
+  //   "권한이 없습니다"가 뜨는 화면/서버 불일치가 생긴다. 판정을 서버와 일치시킨다.
+  const isAdmin = userIsAdmin(currentUser);
+  document.getElementById("tab-report").style.display = isAdmin ? "flex" : "none";
+  document.getElementById("wl-attendance-pick-btn").style.display = isAdmin ? "inline-block" : "none";
+  document.getElementById("wl-attendance-hint").style.display = isAdmin ? "flex" : "none";
 
   await buildCenterFilters();
   loadFidLocations();

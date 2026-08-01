@@ -32,10 +32,22 @@ const RULES_PATH = path.join(__dirname, "..", "storage.rules");
 const CENTER = "쿠팡울산2Sub-Hub";
 const OTHER = "다른센터";
 
-// loginWithCredentials가 커스텀 토큰에 심는 클레임 형태 그대로
+// loginWithCredentials가 커스텀 토큰에 심는 클레임 형태 그대로.
+//
+// ⚠️ [2026-08-01] 아래 셋은 **role이 없는 옛 토큰**이다 — 권한 축을 role로 분리하기 전의
+//   형태이자, 지금 이미 로그인해 있는 사람들이 재로그인 전까지 들고 다니는 토큰이다.
+//   (커스텀 클레임은 토큰을 새로 받기 전까지 갱신되지 않는다.)
+//   이들이 계속 예전과 똑같이 동작하는 것 = storage.rules의 전환기 폴백이 살아있다는 뜻.
 const worker = { uid: "u1", token: { center_name: CENTER, active: false } }; // 현장 직원
 const admin_ = { uid: "u2", token: { center_name: CENTER, active: true } };  // 센터 관리자
 const master = { uid: "u3", token: { center_name: "Master", active: true } };
+
+// 백필(구글시트에 role 열 추가 → syncUsersToFirebase) 이후에 발급될 토큰들.
+// 백필하면 로그인이 필요한 전원이 active:true가 되므로, **active만으로는 더 이상
+// 관리자를 구분할 수 없다** — 그때 role이 실제로 구분해 주는지가 아래 케이스의 핵심이다.
+const workerRole = { uid: "u4", token: { center_name: CENTER, role: "user", active: true } };
+const adminRole  = { uid: "u5", token: { center_name: CENTER, role: "admin", active: false } };
+const masterUser = { uid: "u6", token: { center_name: "Master", role: "user", active: true } };
 
 const photo = `inspection_photos/${CENTER}/20260729_1430_기계_35_1.jpg`;
 
@@ -61,11 +73,37 @@ const cases = [
   ["직원: 근무일지 엑셀 조회", "ALLOW", worker, `work_log/${CENTER}/2026년_7월_점검표.xlsx`, "get"],
   ["직원: 근무일지 엑셀 삭제 시도", "DENY", worker, `work_log/${CENTER}/2026년_7월_점검표.xlsx`, "delete"],
 
-  // ── 템플릿: 읽기는 로그인, 쓰기는 관리자(active=true)/Master ──
-  ["직원(active=false): 템플릿 업로드", "DENY", worker, `templates/${CENTER}/work_sheet.xlsx`, "create"],
-  ["관리자(active=true): 템플릿 업로드", "ALLOW", admin_, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  // ── 템플릿: 읽기는 로그인, 쓰기는 관리자(role="admin") ──
+  // [전환기] role이 없는 옛 토큰은 예전 의미(active)로 폴백해야 한다.
+  // 이 두 줄이 깨지면 재로그인 전 사용자들의 권한이 배포 순간 뒤집힌다.
+  ["[전환기] 직원(role없음+active=false): 템플릿 업로드", "DENY", worker, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  ["[전환기] 관리자(role없음+active=true): 템플릿 업로드", "ALLOW", admin_, `templates/${CENTER}/work_sheet.xlsx`, "create"],
   ["관리자: 템플릿 삭제 시도", "DENY", admin_, `templates/${CENTER}/work_sheet.xlsx`, "delete"],
-  ["직원: 템플릿 조회", "ALLOW", worker, `templates/${CENTER}/work_sheet.xlsx`, "get"],
+  ["직원: 자기 센터 템플릿 조회", "ALLOW", worker, `templates/${CENTER}/work_sheet.xlsx`, "get"],
+
+  // [2026-08-01] 읽기를 isSignedIn() → ownsCenter(center)로 좁힌 것에 대한 케이스.
+  // work_sheet.xlsx는 빈 양식이 아니라 **직원 성명 + 월 근무표가 든 실 데이터**라,
+  // 예전엔 로그인만 하면 남의 센터 직원 명단을 받을 수 있었다. 실 센터가 하나뿐이라
+  // 증상이 없었을 뿐이고, 센터가 늘면 그 순간 열리는 구멍이었다.
+  ["직원: 남의 센터 템플릿 조회", "DENY", worker, `templates/${OTHER}/work_sheet.xlsx`, "get"],
+  ["관리자: 남의 센터 템플릿 업로드", "DENY", admin_, `templates/${OTHER}/work_sheet.xlsx`, "create"],
+  ["Master: 남의 센터 템플릿 조회는 가능(범위가 전 센터)", "ALLOW", master, `templates/${OTHER}/work_sheet.xlsx`, "get"],
+  // templates/report/event.xlsx는 {center}="report"로 매칭되어 이제 브라우저에선 안 읽힌다.
+  // report-export.js가 Admin SDK로 읽으므로 규칙과 무관 — 보고서 생성은 영향 없다.
+  ["직원: 공용 보고서 양식 직접 조회(Admin SDK 전용 경로)", "DENY", worker, "templates/report/event.xlsx", "get"],
+
+  // [백필 후] role이 있으면 role이 이긴다.
+  // ⚠️ 아래 첫 줄이 이 파일에서 가장 중요한 케이스다 — 백필하면 현장 작업자도 active:true가
+  //   되므로, 규칙이 아직 active를 보고 있으면 **작업자 전원이 템플릿을 덮어쓸 수 있게 된다.**
+  ["[백필후] 직원(role=user, active=true): 템플릿 업로드", "DENY", workerRole, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  ["[백필후] 관리자(role=admin, active=false): 템플릿 업로드", "ALLOW", adminRole, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  // Master는 '데이터 범위'이지 '권한'이 아니다 — 예전처럼 `|| isMaster`로 OR를 걸면 여기서 깨진다.
+  ["[백필후] Master지만 role=user: 템플릿 업로드", "DENY", masterUser, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  ["[백필후] Master지만 role=user: 템플릿 조회는 가능(권한은 없어도 범위는 전 센터)", "ALLOW", masterUser, `templates/${CENTER}/work_sheet.xlsx`, "get"],
+
+  // role 도입이 M-SMART 현장 업로드를 건드리지 않는지 — 사진 경로는 ownsCenter(센터)만 본다.
+  ["[백필후] 직원(role=user): 자기 센터 사진 업로드는 계속 가능", "ALLOW", workerRole, photo, "create"],
+  ["[백필후] 직원(role=user): 남의 센터 사진 업로드는 여전히 차단", "DENY", workerRole, `inspection_photos/${OTHER}/x_1.jpg`, "create"],
 
   // ── 서버 전용 산출물: 서명 URL로만 배포(서명 URL은 규칙을 우회하므로 영향 없음) ──
   ["직원: 이벤트 보고서 직접 조회", "DENY", worker, `report/${CENTER}/a.xlsx`, "get"],
