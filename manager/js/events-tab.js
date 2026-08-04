@@ -16,15 +16,23 @@ function subscribeEvents() {
     loadFidLocations(selectedCenter).then(() => renderList());
   }
 
-  let q = db.collection("events")
-    .orderBy("created_at", "desc")
-    .where("created_at", ">=", cutoff);
-
-  if (currentUser.center_name !== "Master") {
-    q = q.where("center_name", "==", currentUser.center_name);
-  } else if (selectedCenter) {
-    q = q.where("center_name", "==", selectedCenter);
+  // [2026-08-05] 센터를 고르기 전에는 구독하지 않는다.
+  //   예전엔 Master가 미선택이면 center_name 필터 없이 **전 센터 90일치**를 실시간
+  //   구독했다. 센터가 늘수록 그 구독만 무거워진다(50곳이면 수천~1만 건을 브라우저가
+  //   들고 매 변경마다 리렌더). 지금은 고른 센터 하나만 구독한다.
+  const center = currentUser.center_name !== "Master" ? currentUser.center_name : selectedCenter;
+  if (!center) {
+    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+    allEvents = [];
+    updateBadge();
+    renderCenterPrompt("event-list", "이벤트 목록");
+    return;
   }
+
+  const q = db.collection("events")
+    .orderBy("created_at", "desc")
+    .where("created_at", ">=", cutoff)
+    .where("center_name", "==", center);
 
   unsubscribe = q.onSnapshot(snap => {
     allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));

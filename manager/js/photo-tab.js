@@ -2,10 +2,17 @@
 // 사진 로드
 // ──────────────────────────────────────────────
 async function loadDashPhotos() {
-  const center = document.getElementById("filter-center-photo").value || (currentUser.center_name !== "Master" ? currentUser.center_name : "");
+  // [2026-08-05] 센터 미선택이면 조회하지 않는다(예전엔 전 센터 inspection_logs를 훑었다).
+  const center = currentCenter();
+  if (!center) {
+    document.getElementById("spinner-photo").classList.remove("show");
+    renderPagination("pagination-photo", 0, 1, "goPhotoPage");
+    renderCenterPrompt("photo-list", "점검 사진");
+    return;
+  }
 
   // Master가 센터 선택하면 해당 센터 sheetLabels 로드
-  if (currentUser.center_name === "Master" && center) {
+  if (currentUser.center_name === "Master") {
     await loadFidLocations(center);
   }
   const start  = document.getElementById("filter-start-photo").value;
@@ -23,7 +30,8 @@ async function loadDashPhotos() {
     // 날짜 필터를 서버 사이드로 이동 — 전체 로그를 받아오지 않아 읽기 비용/속도 개선
     // (center + datetime 복합 색인 필요 시 콘솔 에러의 링크로 생성)
     let q = db.collection("inspection_logs").orderBy("datetime","desc");
-    if (center) q = q.where("center_name","==",center);
+    // center는 위 가드에서 보장된다 (조건부로 두면 가드가 사라졌을 때 전 센터 조회로 되돌아간다)
+    q = q.where("center_name","==",center);
     if (start)  q = q.where("datetime",">=",start);
     if (end)    q = q.where("datetime","<=",end+"\uffff");
     const snap = await q.get();

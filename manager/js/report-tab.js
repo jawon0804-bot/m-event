@@ -157,6 +157,9 @@ async function mapEventReport() {
   const { center, status, start, end } = reportFilters();
   const btn = document.getElementById("report-map-btn");
 
+  // [2026-08-05] 센터 필수. 예전엔 Master가 미선택이면 서버가 **전 센터를 순회하며**
+  //   센터마다 보고서를 만들었다(사진 삽입까지 하는 무거운 작업이라 센터가 늘면 위험).
+  if (!center) { setReportMsg("센터를 선택하세요.", "error"); return; }
   if (!start || !end) { setReportMsg("시작일과 종료일을 선택하세요.", "error"); return; }
   if (isOver1Year(start, end)) { setReportMsg("조회 기간은 최대 1년까지 가능합니다.", "error"); return; }
 

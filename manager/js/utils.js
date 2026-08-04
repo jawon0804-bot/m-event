@@ -46,3 +46,53 @@ function renderPagination(containerId, total, current, onPageClick) {
   if (current < totalPages) html += `<button class="page-btn" onclick="${onPageClick}(${current+1})">›</button>`;
   el.innerHTML = html;
 }
+
+// ──────────────────────────────────────────────
+// 센터 선택 (2026-08-05 신설)
+//
+// 그전까지 Master는 각 탭 드롭다운의 기본값이 "전체"였고, 그러면 각 쿼리가 center_name
+// 필터 없이 **전 센터**를 조회했다. 센터가 늘수록 그것만 무거워지는 구조라
+// (facility-dashboard도 같은 이유로 2026-08-05에 전 센터 합산 조회를 없앴다),
+// 기본값을 "센터를 선택하세요"로 바꾸고 고르기 전에는 조회 자체를 하지 않는다.
+//
+// 📌 **센터를 고르는 곳은 이벤트 탭 드롭다운 하나뿐이다**(2026-08-05 결정).
+//    탭마다 드롭다운이 있으면 어디서 고른 값이 유효한지 헷갈리고, 탭을 옮길 때마다
+//    다시 고르게 된다. 나머지 탭의 select는 화면에서 감추고 값만 같이 맞춰서
+//    (syncCenterSelects) 각 탭 코드가 예전처럼 자기 select를 읽어도 그대로 동작하게 했다.
+//    센터를 고르기 전에는 이벤트 탭 외의 탭이 잠긴다(lockTabsUntilCenter).
+// ──────────────────────────────────────────────
+const CENTER_SELECT_IDS = [
+  "filter-center-event",        // ← 사용자가 실제로 조작하는 유일한 드롭다운
+  "filter-center-excel",
+  "filter-center-photo",
+  "filter-center-report",
+  "filter-center-report-insp",
+];
+
+/** 지금 조회 대상 센터. Master는 드롭다운 값(미선택이면 ""), 그 외는 항상 자기 센터. */
+function currentCenter() {
+  if (!currentUser) return "";
+  if (currentUser.center_name !== "Master") return currentUser.center_name;
+  for (const id of CENTER_SELECT_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.value) return el.value;
+  }
+  return "";
+}
+
+/** 드롭다운 6개를 같은 값으로 맞춘다(어느 탭에서 골라도 나머지가 따라온다). */
+function syncCenterSelects(value) {
+  for (const id of CENTER_SELECT_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.value !== value) el.value = value;
+  }
+}
+
+/** 센터 미선택 안내를 목록 영역에 그린다. 조회를 시작하지 않았다는 뜻. */
+function renderCenterPrompt(containerId, what = "데이터") {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `<div class="empty-state"><div class="icon">🏢</div>` +
+    `<p>조회할 센터를 선택하세요.</p>` +
+    `<p style="font-size:12px;color:var(--gray4)">센터를 고르면 ${esc(what)} 조회를 시작합니다.</p></div>`;
+}

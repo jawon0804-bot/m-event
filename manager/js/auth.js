@@ -132,8 +132,7 @@ async function loadFidLocations(centerOverride) {
 async function showApp() {
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app").style.display          = "flex";
-  const centerLabel = currentUser.center_name === "Master" ? "마스터 (전체)" : currentUser.center_name;
-  document.getElementById("header-user").textContent = `${currentUser.name} · ${centerLabel}`;
+  updateHeaderUser();
 
   // 보고서 탭·출근부 업로드는 관리자만 표시.
   // ⚠️ [2026-08-01] 예전엔 `active === true || center_name === "Master"`였다. Master를 OR로
@@ -148,6 +147,22 @@ async function showApp() {
   await buildCenterFilters();
   loadFidLocations();
   subscribeEvents();
+}
+
+// 헤더의 "이름 · 소속" 표시.
+// [2026-08-05] 예전엔 Master를 "마스터 (전체)"로 적었는데, 전 센터 조회를 없앤 지금은
+// 사실과 다르다. 센터를 고르기 전엔 "마스터", 고른 뒤엔 그 센터를 같이 보여준다.
+function updateHeaderUser() {
+  const el = document.getElementById("header-user");
+  if (!el || !currentUser) return;
+  let label;
+  if (currentUser.center_name !== "Master") {
+    label = currentUser.center_name;
+  } else {
+    const picked = currentCenter();
+    label = picked ? `마스터 · ${picked}` : "마스터";
+  }
+  el.textContent = `${currentUser.name} · ${label}`;
 }
 
 async function buildCenterFilters() {
@@ -166,29 +181,38 @@ async function buildCenterFilters() {
     } catch(e) { console.warn("센터 목록 조회 실패:", e); }
   }
 
-  // 이벤트 탭 센터 드롭다운
-  const eventSel = document.getElementById("filter-center-event");
-  eventSel.style.display = "block";
-  if (isMaster) {
-    eventSel.disabled = false;
-    eventSel.innerHTML = `<option value="">전체</option>` +
-      centers.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  } else {
-    eventSel.innerHTML = `<option value="${esc(currentUser.center_name)}">${esc(currentUser.center_name)}</option>`;
-    eventSel.disabled = true;
-  }
+  // 센터 드롭다운 6개(이벤트/엑셀/사진/보고서/점검표/근무일지)를 같은 규칙으로 채운다.
+  //
+  // ⚠️ [2026-08-05] Master의 첫 항목이 "전체"였는데 없앴다. "전체"는 각 쿼리에서
+  //   center_name 필터를 빼는 뜻이라 **전 센터 조회**가 되고, 센터가 늘수록 그 경로만
+  //   무거워진다(facility-dashboard도 같은 이유로 같은 날 전 센터 합산 조회를 제거했다).
+  //   이제 고르기 전까지는 각 탭이 조회를 시작하지 않고 안내만 보여준다.
+  const optionsHtml = isMaster
+    ? `<option value="">센터를 선택하세요</option>` +
+      centers.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("")
+    : `<option value="${esc(currentUser.center_name)}">${esc(currentUser.center_name)}</option>`;
 
-  for (const k of ["excel","photo","report","report-insp"]) {
-    const sel = document.getElementById(`filter-center-${k}`);
-    if (!isMaster) {
-      sel.innerHTML = `<option value="${esc(currentUser.center_name)}">${esc(currentUser.center_name)}</option>`;
-      sel.disabled = true;
-    } else {
-      sel.disabled = false;
-      sel.innerHTML = `<option value="">전체</option>` +
-        centers.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  for (const id of CENTER_SELECT_IDS) {
+    const sel = document.getElementById(id);
+    if (!sel) continue;
+    sel.innerHTML = optionsHtml;
+    sel.disabled = !isMaster;   // 비-Master는 자기 센터 고정
+
+    // 📌 조작 가능한 드롭다운은 **이벤트 탭 것 하나뿐**이다. 나머지 탭의 select는
+    //   화면에서 감추고 값만 동기화한다 — 각 탭 코드가 예전처럼 자기 select를 읽어도
+    //   그대로 동작하게 하기 위해 DOM에는 남겨둔다. 앞에 붙은 "센터" 라벨도 같이 숨긴다.
+    if (id !== "filter-center-event") {
+      sel.style.display = "none";
+      const prev = sel.previousElementSibling;
+      if (prev && prev.tagName === "LABEL") prev.style.display = "none";
     }
   }
+
+  // 이벤트 탭 드롭다운은 로그인 전까지 숨겨져 있다.
+  const eventSel = document.getElementById("filter-center-event");
+  if (eventSel) eventSel.style.display = "block";
+
+  lockTabsUntilCenter();
 
   // 보고서 탭 서브탭 앞 센터 라벨 (근무일지 탭의 wl-center-label과 동일한 패턴)
   const reportLabelEl = document.getElementById("report-center-label");
@@ -198,11 +222,96 @@ async function buildCenterFilters() {
 // ──────────────────────────────────────────────
 // 페이지 전환 (이벤트 / 엑셀 / 사진)
 // ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// 센터 미선택 잠금 (2026-08-05 신설)
+//
+// 센터를 고르는 곳은 이벤트 탭 드롭다운 하나뿐이라, 고르기 전에는 나머지 탭에 들어가도
+// 볼 게 없다(조회 자체를 안 한다). 빈 화면을 보여주느니 탭을 잠가서 "여기서 먼저 고르라"는
+// 걸 분명히 한다. 비-Master는 센터가 항상 정해져 있으므로 잠기지 않는다.
+// ──────────────────────────────────────────────
+const LOCKABLE_PAGES = ["excel", "photo", "worklog", "report"];
+
+function lockTabsUntilCenter() {
+  const locked = !currentCenter();
+  LOCKABLE_PAGES.forEach(page => {
+    const tab = document.querySelector(`.main-tab[data-page="${page}"]`);
+    if (!tab) return;
+    tab.classList.toggle("tab-locked", locked);
+    tab.title = locked ? "먼저 이벤트 탭에서 센터를 선택하세요" : "";
+  });
+  // 잠긴 탭을 보고 있는 상태에서 센터가 미선택으로 바뀌면 이벤트 탭으로 되돌린다.
+  if (locked && LOCKABLE_PAGES.includes(currentPage)) switchPage("event");
+}
+
 function switchPage(page) {
+  // 잠긴 탭은 무시하고 안내만 — 센터를 고르기 전에는 어차피 조회가 안 된다.
+  if (LOCKABLE_PAGES.includes(page) && !currentCenter()) {
+    const sel = document.getElementById("filter-center-event");
+    if (sel) { sel.focus(); }
+    return;
+  }
   currentPage = page;
   document.querySelectorAll(".main-tab").forEach(el =>
     el.classList.toggle("active", el.dataset.page === page));
   document.querySelectorAll(".page").forEach(el =>
     el.classList.toggle("active", el.id === `page-${page}`));
   if (page === "worklog" && !wlCenter) wlInit();
+  // 센터 미선택 상태로 다른 탭에 들어오면 그 탭에도 안내가 떠야 한다
+  // (탭마다 목록 영역이 달라서 진입 시점에 한 번 그려준다).
+  if (!currentCenter()) showCenterPromptForPage(page);
+}
+
+// ──────────────────────────────────────────────
+// 센터 선택 변경 (2026-08-05 신설)
+//
+// 드롭다운이 탭마다 있어서, 어느 것을 고르든 나머지를 같은 값으로 맞춘다.
+// 탭마다 따로 고르게 하면 Master가 화면을 옮길 때마다 다시 골라야 해서 더 번거롭다.
+// ──────────────────────────────────────────────
+function onCenterChange(value) {
+  syncCenterSelects(value);
+  updateHeaderUser();
+  lockTabsUntilCenter();
+  wlCenter = null;              // 근무일지는 센터가 바뀌면 처음부터 다시 초기화된다
+  eventPage = 1;
+
+  if (!value) {
+    // 미선택으로 되돌린 경우 — 모든 탭을 안내 상태로 되돌리고 구독도 끊는다.
+    if (typeof unsubscribe === "function") { unsubscribe(); unsubscribe = null; }
+    allEvents = [];
+    updateBadge();
+    ["event", "excel", "photo", "report", "worklog"].forEach(showCenterPromptForPage);
+    return;
+  }
+
+  // 현재 보고 있는 탭만 즉시 새로 불러온다. 나머지 탭은 이전 센터 결과가 남아 있으면
+  // 오해를 부르므로 비우고, 그 탭에 들어가서 조회를 누르면 새 센터로 조회된다.
+  if (currentPage === "event")        subscribeEvents();
+  else if (currentPage === "worklog") wlInit();
+  else if (currentPage === "excel")   loadExcel();
+  else if (currentPage === "photo")   loadDashPhotos();
+
+  ["event", "excel", "photo", "report", "worklog"]
+    .filter(p => p !== currentPage)
+    .forEach(clearPageResults);
+}
+
+/** 센터 미선택 안내를 탭별 목록 영역에 그린다. */
+function showCenterPromptForPage(page) {
+  if (page === "event")        renderCenterPrompt("event-list", "이벤트 목록");
+  else if (page === "excel")   renderCenterPrompt("excel-list", "엑셀 파일 목록");
+  else if (page === "photo")   renderCenterPrompt("photo-list", "점검 사진");
+  else if (page === "report")  renderCenterPrompt("report-file-list", "보고서 목록");
+  else if (page === "worklog") {
+    const el = document.getElementById("wl-center-label");
+    if (el) el.textContent = "📓 센터를 선택하세요";
+    const titleEl = document.getElementById("wl-title-text");
+    if (titleEl) titleEl.textContent = "센터를 선택하세요";
+  }
+}
+
+/** 센터가 바뀌었을 때, 지금 안 보고 있는 탭의 이전 센터 결과를 비운다. */
+function clearPageResults(page) {
+  if (page === "excel")       renderCenterPrompt("excel-list", "엑셀 파일 목록");
+  else if (page === "photo")  renderCenterPrompt("photo-list", "점검 사진");
+  else if (page === "report") renderCenterPrompt("report-file-list", "보고서 목록");
 }

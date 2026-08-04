@@ -332,18 +332,19 @@ exports.generateEventReport = onCall({ timeoutSeconds: 300, memory: "512MiB" }, 
     throw new HttpsError("invalid-argument", "조회 기간은 최대 1년까지 가능합니다.");
   }
 
-  // 센터 지정 시 본인 센터인지 확인, 미지정("전체")은 Master만 허용 → 전체 센터 순회
-  let targetCenters;
-  if (center) {
-    if (!isMaster && center !== claims.center_name) {
-      throw new HttpsError("permission-denied", "다른 센터의 보고서는 생성할 수 없습니다.");
-    }
-    targetCenters = [center];
-  } else {
-    if (!isMaster) throw new HttpsError("invalid-argument", "센터를 선택하세요.");
-    const doc = await db.collection("settings").doc("all_centers").get();
-    targetCenters = doc.exists ? (doc.data().centers || []) : [];
+  // 센터는 **필수**다.
+  //
+  // ⚠️ [2026-08-05] 예전엔 미지정("전체")을 Master에게만 허용하고 `settings/all_centers`를
+  //   읽어 **전 센터를 순회**하며 센터마다 보고서를 만들었다. 보고서 생성은 이벤트 조회 +
+  //   사진 임베딩 + xlsx 작성 + Storage 업로드가 센터마다 도는 무거운 작업이라, 센터가
+  //   늘면 한 번의 호출이 그만큼 길어진다(실사용 목표는 최대 50개소).
+  //   화면도 같은 날 센터 선택을 필수로 바꿨는데, **서버가 계속 받아주면 옛 화면·직접 호출로
+  //   그 경로가 그대로 산다.** 그래서 여기서도 막는다.
+  if (!center) throw new HttpsError("invalid-argument", "센터를 선택하세요.");
+  if (!isMaster && center !== claims.center_name) {
+    throw new HttpsError("permission-denied", "다른 센터의 보고서는 생성할 수 없습니다.");
   }
+  const targetCenters = [center];
 
   const results = [];
   for (const c of targetCenters) {

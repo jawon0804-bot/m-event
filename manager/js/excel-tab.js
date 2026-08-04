@@ -30,10 +30,21 @@ async function resolveExcelUrl(item) {
 // keepSelection: 페이지 이동(goExcelPage)처럼 "같은 조회 결과 안에서 화면만 바뀌는" 경우 true.
 // 조회 버튼처럼 결과 자체가 바뀌는 경우엔 false(기본) — 사라진 문서가 선택에 남으면 안 되므로.
 async function loadExcel(keepSelection = false) {
-  const center = document.getElementById("filter-center-excel").value || (currentUser.center_name !== "Master" ? currentUser.center_name : "");
+  // [2026-08-05] 센터 미선택이면 조회하지 않는다. 예전엔 Master가 "전체"면
+  //   center_name 필터가 빠져 전 센터를 훑었다(아래 `if (center)` 참고).
+  const center = currentCenter();
+  if (!center) {
+    document.getElementById("spinner-excel").classList.remove("show");
+    excelDocs = [];
+    excelSelectedIds.clear();
+    syncExcelSelectionUI();
+    renderPagination("pagination-excel", 0, 1, "goExcelPage");
+    renderCenterPrompt("excel-list", "엑셀 파일 목록");
+    return;
+  }
 
   // Master가 센터 선택하면 해당 센터 sheetLabels 로드
-  if (currentUser.center_name === "Master" && center) {
+  if (currentUser.center_name === "Master") {
     await loadFidLocations(center);
   }
   const start  = document.getElementById("filter-start-excel").value;
@@ -49,7 +60,9 @@ async function loadExcel(keepSelection = false) {
   el.innerHTML = ""; sp.classList.add("show");
   try {
     let q = db.collection("Maxerve_Excel").orderBy("datetime","desc");
-    if (center) q = q.where("center_name","==",center);
+    // center는 위 가드에서 보장된다 — 조건부로 두면 나중에 가드가 사라졌을 때
+    // 필터 없이 전 센터를 훑는 쿼리로 조용히 되돌아간다.
+    q = q.where("center_name","==",center);
     if (start)  q = q.where("datetime",">=",start);
     if (end)    q = q.where("datetime","<=",end+"\uffff");
     const snap = await q.get();

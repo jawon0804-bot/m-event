@@ -70,10 +70,15 @@ function wlGetWorkday(d) {
 }
 
 function wlInit() {
-  wlCenter = currentUser.center_name === "Master"
-    ? (document.getElementById("filter-center-event")?.value || "")
-    : currentUser.center_name;
-  if (!wlCenter) return;
+  // [2026-08-05] 예전엔 **이벤트 탭 드롭다운 값을 빌려 썼다.** 그 드롭다운은 이벤트 페이지
+  //   안에 있어서 근무일지 탭에서는 보이지 않았고, 결과적으로 Master는 센터를 바꾸려면
+  //   이벤트 탭으로 돌아가야 했다(근무일지에서는 센터가 고정된 것처럼 보였다).
+  //   이제 근무일지 탭에도 드롭다운이 있고, currentCenter()가 어느 탭에서 골랐든 같은 값을 준다.
+  wlCenter = currentCenter();
+  if (!wlCenter) {
+    showCenterPromptForPage("worklog");
+    return;
+  }
   wlWorkday = wlGetWorkday(new Date());
   wlIsPastMode = false;
   wlPastConfirmedThisSession = false;

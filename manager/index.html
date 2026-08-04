@@ -59,7 +59,7 @@
   <div class="page active" id="page-event">
     <div class="event-toolbar">
       <div class="sub-tabs">
-        <select id="filter-center-event" class="event-center-select" style="display:none;" onchange="eventPage=1;subscribeEvents();wlCenter=null;if(currentPage==='worklog')wlInit();"></select>
+        <select id="filter-center-event" class="event-center-select" style="display:none;" onchange="onCenterChange(this.value)"></select>
         <div class="sub-tab active" data-tab="진행중" onclick="switchEventTab('진행중')">
           진행중 <span class="badge" id="badge-active2">0</span>
         </div>
@@ -80,7 +80,7 @@
   <div class="page" id="page-excel">
     <div class="filter-bar">
       <label>센터</label>
-      <select id="filter-center-excel"></select>
+      <select id="filter-center-excel" onchange="onCenterChange(this.value)"></select>
       <label>시작일</label>
       <input type="date" id="filter-start-excel">
       <label>종료일</label>
@@ -116,7 +116,7 @@
   <div class="page" id="page-photo">
     <div class="filter-bar">
       <label>센터</label>
-      <select id="filter-center-photo"></select>
+      <select id="filter-center-photo" onchange="onCenterChange(this.value)"></select>
       <label>시작일</label>
       <input type="date" id="filter-start-photo">
       <label>종료일</label>
@@ -303,7 +303,7 @@
             <div class="report-row">
               <div>
                 <label>센터</label>
-                <select id="filter-center-report"></select>
+                <select id="filter-center-report" onchange="onCenterChange(this.value)"></select>
               </div>
               <div>
                 <label>상태</label>
@@ -354,7 +354,7 @@
             <div class="report-row">
               <div>
                 <label>센터</label>
-                <select id="filter-center-report-insp"></select>
+                <select id="filter-center-report-insp" onchange="onCenterChange(this.value)"></select>
               </div>
               <div>
                 <label>월</label>
