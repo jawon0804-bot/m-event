@@ -87,6 +87,13 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
    고르기 전에는 나머지 탭에 들어가도 조회가 안 된다. 빈 화면 대신 탭을 잠근다. */
 .main-tab.tab-locked { opacity: .40; cursor: not-allowed; }
 .main-tab.tab-locked:hover { color: rgba(255,255,255,.6); }
+
+/* 감춘 센터 드롭다운 자리에 표시되는 "지금 보고 있는 센터" 이름.
+   조회 범위가 화면에서 사라지면 다른 센터 자료를 자기 것으로 오인할 수 있어서 남긴다. */
+.center-fixed {
+  font-weight: 700; color: var(--navy); white-space: nowrap; font-size: 13px;
+}
+.center-fixed.center-fixed-empty { font-weight: 500; color: var(--gray4); }
 .main-tab .badge {
   background: var(--red); color: #fff; font-size: 11px;
   border-radius: 10px; padding: 1px 6px;

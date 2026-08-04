@@ -60,6 +60,9 @@ const misc = {
   "filter-center-event": makeEl(),
   "event-list": makeEl(), "excel-list": makeEl(), "photo-list": makeEl(),
   "report-file-list": makeEl(), "wl-center-label": makeEl(), "wl-title-text": makeEl(),
+  "report-center-label": makeEl(),
+  "center-name-excel": makeEl(), "center-name-photo": makeEl(),
+  "center-name-report": makeEl(), "center-name-report-insp": makeEl(),
 };
 
 const document = {
@@ -88,7 +91,12 @@ const ctx = {
 };
 vm.createContext(ctx);
 vm.runInContext(
-  [extract("LOCKABLE_PAGES", "const"), extract("lockTabsUntilCenter"), extract("switchPage")].join("\n"),
+  [
+    extract("LOCKABLE_PAGES", "const"),
+    extract("lockTabsUntilCenter"),
+    extract("switchPage"),
+    extract("renderCenterLabels"),
+  ].join("\n"),
   ctx
 );
 
@@ -131,6 +139,28 @@ check("다시 잠김", lockedTabs(), ["excel", "photo", "report", "worklog"]);
 console.log("\n[5] 이벤트 탭은 센터 미선택이어도 항상 들어갈 수 있다");
 ctx.switchPage("event");
 check("이벤트 탭 진입", ctx.currentPage, "event");
+
+// ── 센터명 표시 ─────────────────────────────────────────────
+// 드롭다운을 이벤트 탭 하나로 모으면서 다른 화면에서 "지금 보고 있는 센터"가 사라졌던
+// 적이 있다(2026-08-05 배포 직후 지적). 조회 범위가 안 보이면 다른 센터 자료를 자기
+// 것으로 오인할 수 있어서, 감춘 드롭다운 자리마다 센터명을 남긴다.
+const badgeIds = ["center-name-excel", "center-name-photo", "center-name-report", "center-name-report-insp"];
+
+console.log("\n[6] 센터를 고르면 감춘 드롭다운 자리에 센터명이 뜬다");
+selectedCenter = "B센터";
+ctx.renderCenterLabels();
+check("탭 4곳의 센터명", badgeIds.map(id => misc[id].textContent), ["B센터", "B센터", "B센터", "B센터"]);
+check("보고서 탭 상단 라벨", misc["report-center-label"].textContent, "📊 B센터");
+check("미선택 스타일 아님", misc["center-name-excel"].classList.contains("center-fixed-empty"), false);
+
+console.log("\n[7] 미선택이면 안내 문구가 뜬다 ('전체 센터'로 보이면 안 된다)");
+selectedCenter = "";
+ctx.renderCenterLabels();
+check("탭 4곳", badgeIds.map(id => misc[id].textContent),
+  ["센터를 선택하세요", "센터를 선택하세요", "센터를 선택하세요", "센터를 선택하세요"]);
+check("보고서 탭 상단 라벨", misc["report-center-label"].textContent, "📊 센터를 선택하세요");
+check("근무일지 라벨", misc["wl-center-label"].textContent, "📓 센터를 선택하세요");
+check("미선택 스타일 적용", misc["center-name-excel"].classList.contains("center-fixed-empty"), true);
 
 console.log(`\n${fail ? `실패 ${fail}건 / ` : "전체 통과 "}${pass + fail}건`);
 process.exit(fail ? 1 : 0);

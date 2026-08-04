@@ -155,13 +155,11 @@ async function showApp() {
 function updateHeaderUser() {
   const el = document.getElementById("header-user");
   if (!el || !currentUser) return;
-  let label;
-  if (currentUser.center_name !== "Master") {
-    label = currentUser.center_name;
-  } else {
-    const picked = currentCenter();
-    label = picked ? `마스터 · ${picked}` : "마스터";
-  }
+  // Master는 고른 센터를 보여준다(고르기 전엔 "마스터"). 예전엔 "마스터 (전체)"였는데
+  // 전 센터 조회를 없앤 지금은 사실과 다르다. 이름과 중복되지 않게 센터만 붙인다.
+  const label = currentUser.center_name !== "Master"
+    ? currentUser.center_name
+    : (currentCenter() || "마스터");
   el.textContent = `${currentUser.name} · ${label}`;
 }
 
@@ -200,12 +198,11 @@ async function buildCenterFilters() {
 
     // 📌 조작 가능한 드롭다운은 **이벤트 탭 것 하나뿐**이다. 나머지 탭의 select는
     //   화면에서 감추고 값만 동기화한다 — 각 탭 코드가 예전처럼 자기 select를 읽어도
-    //   그대로 동작하게 하기 위해 DOM에는 남겨둔다. 앞에 붙은 "센터" 라벨도 같이 숨긴다.
-    if (id !== "filter-center-event") {
-      sel.style.display = "none";
-      const prev = sel.previousElementSibling;
-      if (prev && prev.tagName === "LABEL") prev.style.display = "none";
-    }
+    //   그대로 동작하게 하기 위해 DOM에는 남겨둔다.
+    //   ⚠️ "센터" 라벨은 **남긴다.** 처음엔 라벨까지 숨겼더니 엑셀·사진·보고서·점검표
+    //   화면에서 "지금 어느 센터를 보고 있는지"가 통째로 사라졌다(2026-08-05 지적).
+    //   select 자리에는 선택된 센터명을 텍스트로 보여준다(#center-name-*).
+    if (id !== "filter-center-event") sel.style.display = "none";
   }
 
   // 이벤트 탭 드롭다운은 로그인 전까지 숨겨져 있다.
@@ -214,9 +211,39 @@ async function buildCenterFilters() {
 
   lockTabsUntilCenter();
 
-  // 보고서 탭 서브탭 앞 센터 라벨 (근무일지 탭의 wl-center-label과 동일한 패턴)
+  renderCenterLabels();
+}
+
+// ──────────────────────────────────────────────
+// 선택한 센터명을 화면 곳곳에 표시 (2026-08-05 신설)
+//
+// 센터 드롭다운을 이벤트 탭 하나로 모으면서, 나머지 화면에서 "지금 어느 센터를 보고
+// 있는지"가 사라졌다. 조회 범위가 안 보이는 화면은 위험하다 — 다른 센터 자료를 자기
+// 센터 것으로 읽을 수 있다. 그래서 select를 감춘 자리마다 센터명을 글자로 남긴다.
+// ──────────────────────────────────────────────
+function renderCenterLabels() {
+  const picked = currentCenter();
+  const text = picked || "센터를 선택하세요";
+
+  ["excel", "photo", "report", "report-insp"].forEach(k => {
+    const el = document.getElementById(`center-name-${k}`);
+    if (el) {
+      el.textContent = text;
+      el.classList.toggle("center-fixed-empty", !picked);
+    }
+  });
+
+  // 보고서 탭 서브탭 앞 라벨 (근무일지 탭의 wl-center-label과 동일한 패턴)
+  // ⚠️ 예전엔 Master면 무조건 "📊 전체 센터"였다. 전 센터 조회를 없앤 뒤에도 그대로
+  //   남아 있어서, 실제로는 한 센터만 보면서 "전체 센터"라고 적힌 상태였다.
   const reportLabelEl = document.getElementById("report-center-label");
-  if (reportLabelEl) reportLabelEl.textContent = isMaster ? "📊 전체 센터" : `📊 ${currentUser.center_name}`;
+  if (reportLabelEl) reportLabelEl.textContent = `📊 ${text}`;
+
+  // 근무일지 라벨은 wlInit()이 센터를 확정한 뒤 직접 쓴다(미선택이면 안내 문구).
+  if (!picked) {
+    const wlEl = document.getElementById("wl-center-label");
+    if (wlEl) wlEl.textContent = "📓 센터를 선택하세요";
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -270,6 +297,7 @@ function switchPage(page) {
 function onCenterChange(value) {
   syncCenterSelects(value);
   updateHeaderUser();
+  renderCenterLabels();
   lockTabsUntilCenter();
   wlCenter = null;              // 근무일지는 센터가 바뀌면 처음부터 다시 초기화된다
   eventPage = 1;
