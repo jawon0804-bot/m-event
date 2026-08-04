@@ -17,21 +17,27 @@
 //   grade        : 직급(센터장/과장/팀장) — 표시용이며 권한과 무관하다. 읽지 말 것.
 //
 // ------------------------------------------------------------------------------
-// [전환기 폴백] role이 없으면 예전 의미(active === true)로 판정한다.
+// [2026-08-04] 전환기 폴백 제거 — 이제 **role만 본다(fail-closed)**.
 //
-// UserDB의 정본은 이 저장소가 아니라 **구글시트**이고, 시트→Firestore 동기화는
-// Apps Script `syncUsersToFirebase`가 담당한다(저장소 밖 코드). 즉 코드 배포와
-// 시트 백필은 원자적으로 같이 일어날 수 없다. 폴백이 없으면 배포가 백필보다
-// 먼저 도착하는 순간 관리자 전원이 권한을 잃는다.
+// 2026-08-01~08-02에는 `role`이 없으면 예전 의미(`active === true`)로 판정하는
+// 폴백이 있었다. UserDB 정본이 구글시트라 코드 배포와 시트 백필이 원자적으로
+// 같이 일어날 수 없어서, 그 사이 관리자 전원이 권한을 잃는 걸 막는 다리였다.
 //
-// 폴백 덕분에 배포/백필 순서가 어긋나도 동작이 바뀌지 않는다:
-//   · role 없음 + active:true  → 관리자 (지금과 동일)
-//   · role 없음 + active:false → 일반   (지금과 동일)
-//   · role 있음                → role이 이김
+// 제거 조건이 다 충족돼서 지웠다:
+//   · UserDB 사용자 문서 8건 전원 `role` 보유 (폴백에 의존하는 계정 0건)
+//   · 구글시트 Apps Script 교체 완료 — 이제 "등록"을 눌러도 role이 안 지워진다
+//     (옛 스크립트는 updateMask 없이 patch해서 role/notify_email을 날렸다)
 //
-// 📌 백필이 끝나면(UserDB 전 문서에 role 존재) hasRole()과 폴백 두 줄만 지우면 된다.
-//    지우기 전에 반드시 확인할 것 — role이 빠진 문서가 하나라도 남아 있으면
-//    그 사람은 조용히 일반 사용자로 강등된다.
+// ⚠️ 지금 규칙: **role이 없거나 "admin"이 아니면 관리자가 아니다.** active는
+//    관리자 판정에 전혀 관여하지 않는다(계정 활성 = 로그인 가부 전용).
+//    누군가 role 없는 문서를 만들면 그 사람은 관리자 기능만 못 쓴다 —
+//    로그인과 현장 점검은 그대로 된다. 조용히 열리는 것보다 이쪽이 안전하다.
+//
+// 📌 이 판정은 **UserDB 문서와 토큰 클레임 양쪽**에 쓰인다. 클레임은 로그인
+//    시점에 굳고 재로그인 전엔 안 바뀌므로(`auth.js`가 role 있을 때만 싣는다),
+//    앞으로 판정 규칙을 또 바꾸면 **기존 세션의 리프레시 토큰 폐기까지 같이
+//    계획할 것.** 2026-08-04에 실제로 관리자 4명이 3~4주 전 세션을 그대로
+//    쓰고 있었다(system_map.md 6번 "남은 미조치" 참고).
 // ==============================================================================
 
 const MASTER_CENTER_NAME = "Master";
@@ -41,10 +47,6 @@ const ROLE_USER  = "user";
 // UserDB 문서(Admin SDK)와 커스텀 클레임(Callable) 양쪽 모두 이 함수들에 넣을 수 있다 —
 // 필드명이 같기 때문. auth.js가 클레임에 role을 그대로 실어 보낸다.
 
-function hasRole(src) {
-  return !!src && typeof src.role === "string" && src.role !== "";
-}
-
 /**
  * 관리자 권한 — Dashboard 접근, 보고서 생성·다운로드, 출근부 템플릿 업로드,
  * 엑셀 통합본 생성, 알림메일 수신.
@@ -53,12 +55,12 @@ function hasRole(src) {
  *   OR로 묶여 있었는데, 그러면 center_name이 범위와 권한을 겸하게 되어
  *   "전 센터를 열람하되 보고서는 만들지 않는 계정"을 표현할 방법이 없었다.
  *   Master 계정도 관리자여야 한다면 UserDB에 role:"admin"을 명시할 것.
- *   (전환기에는 폴백이 active:true를 보고 그대로 관리자로 판정하므로 당장은 안 바뀐다)
+ *
+ * ⚠️ active는 여기서 **안 본다.** 계정 활성(로그인 가부)과 관리자 권한은 다른 축이고,
+ *   둘을 다 요구하는 자리에는 아래 shouldReceiveMail()처럼 명시적으로 조합할 것.
  */
 function isAdmin(src) {
-  if (!src) return false;
-  if (hasRole(src)) return src.role === ROLE_ADMIN;
-  return src.active === true;            // [전환기 폴백] — 백필 완료 후 제거
+  return !!src && src.role === ROLE_ADMIN;
 }
 
 /** 데이터 범위가 전 센터인가 (조회 범위이지 권한이 아니다) */
@@ -108,7 +110,6 @@ module.exports = {
   MASTER_CENTER_NAME,
   ROLE_ADMIN,
   ROLE_USER,
-  hasRole,
   isAdmin,
   isMaster,
   isActiveAccount,

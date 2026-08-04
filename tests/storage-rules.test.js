@@ -34,12 +34,14 @@ const OTHER = "다른센터";
 
 // loginWithCredentials가 커스텀 토큰에 심는 클레임 형태 그대로.
 //
-// ⚠️ [2026-08-01] 아래 셋은 **role이 없는 옛 토큰**이다 — 권한 축을 role로 분리하기 전의
-//   형태이자, 지금 이미 로그인해 있는 사람들이 재로그인 전까지 들고 다니는 토큰이다.
-//   (커스텀 클레임은 토큰을 새로 받기 전까지 갱신되지 않는다.)
-//   이들이 계속 예전과 똑같이 동작하는 것 = storage.rules의 전환기 폴백이 살아있다는 뜻.
-const worker = { uid: "u1", token: { center_name: CENTER, active: false } }; // 현장 직원
-const admin_ = { uid: "u2", token: { center_name: CENTER, active: true } };  // 센터 관리자
+// ⚠️ [2026-08-04 갱신] 아래 셋은 **role이 없는 옛 토큰**이다 — 권한 축을 role로 분리하기
+//   전의 형태다. 2026-08-01~08-02에는 폴백이 있어서 `active:true`면 관리자로 통했지만,
+//   폴백을 제거한 지금은 **관리자 기능이 전부 막혀야 정상**이다(사진 업로드처럼
+//   ownsCenter만 보는 경로는 그대로 동작한다 — 현장은 안 멈춘다).
+//   클레임은 재로그인 전까지 갱신되지 않으므로, 폴백 제거 배포 전에 기존 관리자
+//   토큰을 폐기해 재로그인시켰다.
+const worker = { uid: "u1", token: { center_name: CENTER, active: false } }; // 현장 직원(옛 토큰)
+const admin_ = { uid: "u2", token: { center_name: CENTER, active: true } };  // 옛 관리자 토큰(role 없음)
 const master = { uid: "u3", token: { center_name: "Master", active: true } };
 
 // 백필(구글시트에 role 열 추가 → syncUsersToFirebase) 이후에 발급될 토큰들.
@@ -74,10 +76,10 @@ const cases = [
   ["직원: 근무일지 엑셀 삭제 시도", "DENY", worker, `work_log/${CENTER}/2026년_7월_점검표.xlsx`, "delete"],
 
   // ── 템플릿: 읽기는 로그인, 쓰기는 관리자(role="admin") ──
-  // [전환기] role이 없는 옛 토큰은 예전 의미(active)로 폴백해야 한다.
-  // 이 두 줄이 깨지면 재로그인 전 사용자들의 권한이 배포 순간 뒤집힌다.
-  ["[전환기] 직원(role없음+active=false): 템플릿 업로드", "DENY", worker, `templates/${CENTER}/work_sheet.xlsx`, "create"],
-  ["[전환기] 관리자(role없음+active=true): 템플릿 업로드", "ALLOW", admin_, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  // [2026-08-04] 전환기 폴백 제거 — role이 없는 옛 토큰은 이제 관리자가 아니다.
+  // 아래 두 줄이 "ALLOW"로 되돌아가면 폴백이 부활한 것이다(= active:true 하나로 관리자).
+  ["[폴백제거] 직원(role없음+active=false): 템플릿 업로드", "DENY", worker, `templates/${CENTER}/work_sheet.xlsx`, "create"],
+  ["[폴백제거] 옛 토큰(role없음+active=true): 템플릿 업로드", "DENY", admin_, `templates/${CENTER}/work_sheet.xlsx`, "create"],
   ["관리자: 템플릿 삭제 시도", "DENY", admin_, `templates/${CENTER}/work_sheet.xlsx`, "delete"],
   ["직원: 자기 센터 템플릿 조회", "ALLOW", worker, `templates/${CENTER}/work_sheet.xlsx`, "get"],
 

@@ -47,10 +47,11 @@ function logout() {
 //   전까지 role 없는 옛 토큰을 들고 다닌다. 폴백이 없으면 그 사람들의 보고서 탭이
 //   재로그인할 때까지 사라진다. 백필 완료 후 폴백만 지우면 된다.
 // ==============================================================================
+// [2026-08-04] 전환기 폴백(role이 없으면 active로 판정) 제거 — 이제 role만 본다.
+// 이 값은 토큰 클레임에서 복원한 currentUser라, role이 없는 옛 세션은 관리자 UI가
+// 보이지 않는다. 폴백 제거 전에 기존 관리자 토큰을 폐기해 재로그인시켰다.
 function userIsAdmin(u) {
-  if (!u) return false;
-  if (typeof u.role === "string" && u.role !== "") return u.role === "admin";
-  return u.active === true;              // [전환기 폴백] — 백필 완료 후 제거
+  return !!u && u.role === "admin";
 }
 
 // 새로고침/재방문 시 Firebase Auth가 세션을 자체 관리 (sessionStorage 더 이상 불필요).

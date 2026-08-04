@@ -10,10 +10,10 @@
 // 그 사람이 센터 전체 보고서 권한과 Dashboard 접근까지 자동으로 얻는" 상태였다.
 // 축을 role / active / notify_email로 쪼개면서 두 가지가 깨지기 쉬워졌다:
 //
-//   1) **전환기 폴백** — UserDB 정본이 구글시트라 코드 배포와 백필이 동시에 일어날 수
-//      없다. role이 없는 문서/토큰을 예전 의미(active)로 판정하지 않으면, 배포가 백필보다
-//      먼저 도착하는 순간 관리자 전원이 권한을 잃는다. 폴백을 "정리"하다가 지우는 사고를
-//      막는 게 아래 [2]번 그룹이다.
+//   1) **fail-closed 방향** — [2026-08-04] 전환기 폴백(role이 없으면 active로 판정)을
+//      제거했다. 이제 role이 없으면 관리자가 아니다. 아래 [2]번 그룹이 그걸 고정한다.
+//      ⚠️ 이 그룹이 깨지면(= 폴백이 되살아나면) active:true 하나로 다시 관리자가 되어,
+//      지금 분리한 "권한 ≠ 계정활성"이 조용히 원래대로 돌아간다.
 //   2) **fail-open 방향** — active/notify_email은 값이 없을 때 각각 활성/수신으로 봐야
 //      한다. 반대로 뒤집으면 현장이 로그인 못 하거나 알림이 조용히 끊긴다. [3]번 그룹.
 //
@@ -22,7 +22,7 @@
 // 그걸 되돌리면 "전 센터를 열람하되 보고서는 만들지 않는 계정"이 다시 표현 불가가 된다.
 const assert = require("assert");
 const {
-  isAdmin, isMaster, isActiveAccount, wantsMail, shouldReceiveMail, hasRole,
+  isAdmin, isMaster, isActiveAccount, wantsMail, shouldReceiveMail,
 } = require("../functions/lib/permissions");
 
 let pass = 0;
@@ -49,14 +49,14 @@ check("role:admin이면 active:false여도 관리자 (축이 분리됐으므로)
 check("role:user면 active:true여도 일반 (role이 이긴다)",
   isAdmin({ role: "user", active: true }), false);
 
-console.log("\n[2] 전환기 폴백 — role이 없으면 예전 의미(active)로 판정한다");
-console.log("    ⚠️ 이 그룹이 깨지면 배포가 시트 백필보다 먼저 도착했을 때 관리자 전원이 권한을 잃는다.");
-check("role 없음 + active:true → 관리자 (예전과 동일)", isAdmin({ active: true }), true);
-check("role 없음 + active:false → 일반 (예전과 동일)", isAdmin({ active: false }), false);
+console.log("\n[2] fail-closed — role이 없으면 관리자가 아니다 (2026-08-04 폴백 제거)");
+console.log("    ⚠️ 여기가 깨지면 active:true 하나로 다시 관리자가 되어 축 분리가 무효가 된다.");
+check("role 없음 + active:true → 일반 (예전엔 폴백으로 관리자였다)", isAdmin({ active: true }), false);
+check("role 없음 + active:false → 일반", isAdmin({ active: false }), false);
 check("role 없음 + active 없음 → 일반", isAdmin({ center_name: CENTER }), false);
-check("role:\"\"(빈 문자열)은 '없음'으로 취급해 폴백", isAdmin({ role: "", active: true }), true);
-check("hasRole: 빈 문자열은 role 없음", hasRole({ role: "" }), false);
-check("hasRole: 채워져 있으면 있음", hasRole({ role: "user" }), true);
+check("role:\"\"(빈 문자열) + active:true → 일반", isAdmin({ role: "", active: true }), false);
+check("null/undefined → 일반 (throw 하지 않는다)", isAdmin(null), false);
+check("role:\"ADMIN\"(대문자) → 일반 (정확일치만 인정)", isAdmin({ role: "ADMIN" }), false);
 
 console.log("\n[3] fail-open 방향 — 값이 없을 때 잠기거나 끊기면 안 된다");
 check("active 없음 → 활성으로 본다 (잘못 잠그면 현장이 멈춤)", isActiveAccount({}), true);
@@ -74,8 +74,8 @@ check("Master + role:user → 관리자가 아니다",
   isAdmin({ center_name: "Master", role: "user" }), false);
 check("Master + role:admin → 관리자",
   isAdmin({ center_name: "Master", role: "admin" }), true);
-check("Master + role 없음 + active:true → 폴백으로 관리자 (전환기, 현재 운영 계정 2명이 이 상태)",
-  isAdmin({ center_name: "Master", active: true }), true);
+check("Master + role 없음 + active:true → 관리자 아님 (폴백 제거 후)",
+  isAdmin({ center_name: "Master", active: true }), false);
 
 console.log("\n[5] 알림메일 수신 대상 = 활성 + 관리자 + 수신 거부 안 함");
 check("관리자 + 수신 → 받는다",
@@ -88,9 +88,9 @@ check("일반 사용자는 수신 설정과 무관하게 안 받는다",
   shouldReceiveMail({ role: "user", active: true, notify_email: true }), false);
 check("비활성 계정(퇴사자)은 관리자여도 안 받는다",
   shouldReceiveMail({ role: "admin", active: false, notify_email: true }), false);
-check("전환기: role 없음 + active:true → 받는다 (예전과 동일)",
-  shouldReceiveMail({ active: true }), true);
-check("전환기: role 없음 + active:false → 안 받는다 (예전과 동일)",
+check("role 없음 + active:true → 안 받는다 (폴백 제거 후 fail-closed)",
+  shouldReceiveMail({ active: true }), false);
+check("role 없음 + active:false → 안 받는다",
   shouldReceiveMail({ active: false }), false);
 
 console.log("\n[6] 잘못된 입력에 터지지 않는다 (Firestore 문서가 비어 오는 경우 등)");

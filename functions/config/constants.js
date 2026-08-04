@@ -178,6 +178,20 @@ module.exports = {
   //
   // ③을 건너뛰고 true로 켜면, 지금 active:false인 현장 작업자(2026-08-01 기준 2명)가
   // M-SMART에 로그인하지 못한다. 값이 false인 동안은 예전과 동일하게 동작한다.
+  //
+  // ✅ [2026-08-04] ①~④ 전부 끝나서 true로 켠다. 켠 시점의 실측 상태:
+  //   · UserDB 사용자 문서 8건 전원 `role`/`notify_email` 보유 (폴백 의존 0명)
+  //   · 구글시트 Apps Script 교체 완료 → 이제 "등록"을 눌러도 role이 안 지워진다
+  //   · active:false는 **1명뿐이고 퇴사자다**(박종관). 즉 이 플래그를 켜서 실제로
+  //     차단되는 사람은 그 1명이고, 그게 이 기능을 만든 목적이다.
+  //
+  // ⚠️ 이 플래그는 **새 로그인만** 막는다. 이미 발급된 세션은 그대로 살아 있다
+  //   (firestore.rules는 active를 안 본다). 퇴사자를 실제로 끊으려면 이 플래그를
+  //   켜는 것만으로 부족하고, 그 사람의 리프레시 토큰도 폐기해야 한다:
+  //     POST identitytoolkit.googleapis.com/v1/projects/m-smart-90148/accounts:update
+  //          {"localId":"<uid>","validSince":"<지금 epoch초>"}
+  //          헤더에 x-goog-user-project: m-smart-90148 필요(ADC 할당량 프로젝트)
+  //   실제로 2026-08-04에 박종관 계정은 2026-07-08 로그인 세션이 그대로 살아 있었다.
   // ==============================================================================
-  ENFORCE_ACTIVE_LOGIN: false,
+  ENFORCE_ACTIVE_LOGIN: true,
 };
