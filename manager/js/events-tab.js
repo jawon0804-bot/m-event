@@ -130,7 +130,9 @@ function openModal(eventId) {
   document.getElementById("m-worker").textContent       = currentEvent.worker        || "";
   document.getElementById("m-datetime").textContent     = currentEvent.datetime      || "";
   loadEventPhotos(currentEvent);
-  const icons   = { "발생":"🔴","조치중":"🟡","완료":"🟢" };
+  // "조치중"은 2026-08-14에 "진행중"으로 이름이 바뀌었지만, 그 전에 쌓인 history 항목엔
+  // 옛 이름이 그대로 남아 있다(이력은 지난 기록이라 고치지 않는다) — 둘 다 받아준다.
+  const icons   = { "발생":"🔴","진행중":"🟡","조치중":"🟡","완료":"🟢" };
   const history = currentEvent.history || [];
   document.getElementById("modal-timeline").innerHTML = history.map((h,i) => `
     <div class="timeline-item">
@@ -151,7 +153,7 @@ function openModal(eventId) {
     ? `<div class="completed-msg">🟢 이 이벤트는 완료 처리되었습니다.</div>`
     : `<textarea id="action-text" placeholder="조치사항 또는 완료 내용을 입력하세요..."></textarea>
        <div class="action-btns">
-         <button class="btn btn-action" onclick="submitAction('조치중')">🟡 조치 진행</button>
+         <button class="btn btn-action" onclick="submitAction('진행중')">🟡 조치 진행</button>
          <button class="btn btn-done"   onclick="submitAction('완료')">🟢 완료 처리</button>
        </div>`;
   document.getElementById("modal-overlay").classList.add("open");

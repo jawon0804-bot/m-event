@@ -144,7 +144,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 
 .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.발생  { background: var(--red); }
-.status-dot.조치중 { background: var(--yellow); }
+.status-dot.진행중 { background: var(--yellow); }
 .status-dot.완료  { background: var(--green); }
 
 .event-meta { min-width: 160px; }
@@ -162,7 +162,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   padding: 2px 8px; border-radius: 10px; margin-top: 4px;
 }
 .status-badge.발생  { background: #fee2e2; color: var(--red); }
-.status-badge.조치중 { background: #fef3c7; color: var(--yellow); }
+.status-badge.진행중 { background: #fef3c7; color: var(--yellow); }
 .status-badge.완료  { background: #dcfce7; color: var(--green); }
 
 /* ══════════════════════════════════
@@ -345,6 +345,8 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
 }
 .t-icon.발생  { background: #fee2e2; }
+/* 이력(history[].type)은 지난 기록이라 옛 이름 "조치중"이 그대로 남아 있다 — 둘 다 유지 */
+.t-icon.진행중 { background: #fef3c7; }
 .t-icon.조치중 { background: #fef3c7; }
 .t-icon.완료  { background: #dcfce7; }
 .t-line { width: 2px; flex: 1; background: var(--gray2); margin: 4px 0; }
@@ -352,6 +354,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .t-header { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
 .t-type { font-size: 12px; font-weight: 700; }
 .t-type.발생  { color: var(--red); }
+.t-type.진행중 { color: var(--yellow); }
 .t-type.조치중 { color: var(--yellow); }
 .t-type.완료  { color: var(--green); }
 .t-by { font-size: 12px; color: var(--gray4); }

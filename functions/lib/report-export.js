@@ -21,8 +21,7 @@ const { fixSheetPrOrder } = require("./excel-utils");
 const { isMaster: isMasterOf, isAdmin } = require("./permissions");
 const {
   REPORT_TEMPLATE_PATH, REPORT_TEMPLATE_SHEET, REPORT_DATA_START_ROW,
-  REPORT_MAX_ROWS, REPORT_PHOTO_SIZE_PX, REPORT_STATUS_COLOR,
-  REPORT_ROW_MIN_HEIGHT_PT, REPORT_TEXT_COL_WIDTH,
+  REPORT_MAX_ROWS, REPORT_LAST_COL, REPORT_PHOTO_SIZE_PX, REPORT_STATUS_COLOR,
 } = require("../config/constants");
 
 // ==============================================================================
@@ -67,7 +66,7 @@ function buildTitle(startStr, endStr, center) {
 // events.history 배열에서 최초 발생(memo)과 이후 조치 이력(진행현황 텍스트)을 분리
 // ※ 최초 발생 내용은 history[0]이 아니라 이벤트 문서 자체의 memo 필드를 그대로 씀
 //   (events-tab.js 모달의 제목도 currentEvent.memo를 씀 — 두 군데가 어긋나지 않게 통일)
-// [2026-07-23] 일시 뒤에 작성자(*이름*)를 붙임 — 누가 조치/완료 처리했는지 J열만 보고도 알 수 있게
+// [2026-07-23] 일시 뒤에 작성자(*이름*)를 붙임 — 누가 조치/완료 처리했는지 I열만 보고도 알 수 있게
 function buildProgressText(history) {
   const list = Array.isArray(history) ? history : [];
   return list
@@ -79,29 +78,36 @@ function buildProgressText(history) {
     .join("\n");
 }
 
-// events-tab.js의 fmtDate 표시 규칙과 다르게, 템플릿 C열은 "날짜\n  시간" 2줄 형태
+// events-tab.js의 fmtDate 표시 규칙과 다르게, 템플릿 B열은 "날짜\n  시간" 2줄 형태
 // (event.xlsx 실측: '2026-07-10\n  13:25'). ev.datetime은 "YYYY-MM-DD HH:mm" 문자열.
 function formatDatetimeCell(datetime) {
   const [d, t] = String(datetime || "").split(" ");
   return t ? `${d}\n  ${t}` : (d || "");
 }
 
-// [2026-07-23] I(상황발생 내용)/J(진행현황) 글자가 길면 셀보다 내용이 넘쳐 보이던 문제 —
-// 실제 텍스트 레이아웃 엔진은 없으니 "열 너비 단위 ≈ 글자 수"로 대략 줄 수를 추정해서
-// 필요한 줄 수만큼 행 높이를 늘린다. 평소(사진 들어가는 짧은 내용)엔 최소 높이 그대로.
-const REPORT_LINE_HEIGHT_PT = 16; // 12pt 폰트 기준 대략적인 줄 간격
-function estimateTextLines(text, colWidthUnits) {
-  if (!text) return 0;
-  const charsPerLine = Math.max(1, Math.floor(colWidthUnits));
-  return String(text).split("\n")
-    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
-}
-function computeRowHeight(memo, progressText) {
-  const iLines = estimateTextLines(memo, REPORT_TEXT_COL_WIDTH.I);
-  const jLines = estimateTextLines(progressText, REPORT_TEXT_COL_WIDTH.J);
-  const neededHeight = Math.max(iLines, jLines) * REPORT_LINE_HEIGHT_PT + 10; // 여백
-  return Math.max(REPORT_ROW_MIN_HEIGHT_PT, neededHeight);
-}
+// ──────────────────────────────────────────────────────────────────────────────
+// [2026-08-14] 행 높이는 **템플릿 값(6~106행 170.85pt = 6cm 사진 기준)을 그대로 쓴다.**
+// 여기서 아무것도 안 하는 게 의도다 — 되돌리기 전에 아래를 읽을 것.
+//
+// 2026-07-23~2026-08-14에는 상황발생 내용/진행현황 글자 수로 줄 수를 추정해서 행을
+// 늘렸다(estimateTextLines/computeRowHeight). 그런데 그 추정이 한글에서 실제의 절반이라
+// 늘려도 여전히 잘렸다 — Excel 16.0 실측 기준:
+//   · 열 너비 단위는 "숫자 0 한 글자" 폭이라 한글은 2칸을 먹는다
+//     (진행현황 열 너비 70.625에 한글은 35자만 들어가는데 코드는 70자로 셌다)
+//   · 맑은 고딕 12pt 한 줄은 16pt가 아니라 17.25pt
+//   → 조치 이력 3건(실제 필요 207pt)을 170.8pt로 잡아서 2줄이 잘려 나갔다.
+// 반쯤 맞는 높이를 계산하느니 사진 크기에 맞춘 고정 높이로 두고, 내용이 길어 잘리면
+// 파일을 받은 관리자가 직접 늘리는 쪽이 낫다는 판단이다(2026-08-14 결정).
+//
+// 나중에 이걸 다시 자동화한다면 참고할 것:
+//   · 셀 값 자체는 온전하다. 잘리는 건 표시뿐이고, 행 높이만 늘리면 다시 보인다.
+//   · 템플릿 서식이 "세로 가운데"라 잘릴 때 위아래가 같이 잘린다(뒤쪽만이 아니다).
+//   · Excel 행 높이 상한이 409.5pt(약 23줄)라, 조치 이력이 6건쯤 넘으면 높이를
+//     아무리 키워도 다 못 보여준다. 그건 높이가 아니라 양식으로 풀어야 하는 문제다.
+//   · 높이를 아예 안 쓰면(ht/customHeight 미기록) Excel이 열 때 자동 맞춤을 해 준다.
+//     단 자동 맞춤은 **그림을 계산에 안 넣어서** 내용이 짧은 행은 69pt로 줄어들고
+//     6cm 사진이 아래 행을 침범한다 — 사진이 들어가는 이 양식에선 그대로 못 쓴다.
+// ──────────────────────────────────────────────────────────────────────────────
 
 function guessImageExtension(url) {
   const m = /\.(jpe?g|png|gif)(\?|$)/i.exec(url || "");
@@ -154,7 +160,7 @@ async function embedPhotos(workbook, ws, rowNumber, photos) {
   for (let i = 0; i < Math.min(photos.length, 3); i++) {
     const imageId = workbook.addImage({ buffer: photos[i].buffer, extension: photos[i].extension });
     ws.addImage(imageId, {
-      tl: { col: 5 + i, row: rowNumber - 1 }, // F=col5(0-idx), G=6, H=7
+      tl: { col: 4 + i, row: rowNumber - 1 }, // E=col4(0-idx), F=5, G=6
       ext: { width: REPORT_PHOTO_SIZE_PX, height: REPORT_PHOTO_SIZE_PX },
       editAs: "oneCell",
     });
@@ -230,15 +236,16 @@ async function buildReportWorkbook({ center, start, end, events }) {
   for (let i = 0; i < mapped.length; i++) {
     const ev = mapped[i];
     const row = REPORT_DATA_START_ROW + i;
-    const progressText = buildProgressText(ev.history);
-    ws.getCell(row, 2).value = ev.center_name || "";                       // B 센터명
-    ws.getCell(row, 3).value = formatDatetimeCell(ev.datetime);            // C 발생일시
-    ws.getCell(row, 4).value = ev.fid_name || ev.facility_id || "";        // D 설비/위치
-    ws.getCell(row, 5).value = ev.worker || "";                           // E 점검자
-    ws.getCell(row, 9).value = ev.memo || "";                             // I 상황발생 내용
-    ws.getCell(row, 10).value = progressText;                             // J 진행현황
+    // [2026-08-14 양식 개편] 센터명 열이 없어져서 좌표가 한 칸씩 당겨졌다.
+    // 센터는 제목(A1)에 이미 들어가므로 정보가 빠지는 건 아니다.
+    // J·K(완료사진1~2)는 관리자가 파일을 받은 뒤 직접 넣는 자리라 코드는 건드리지 않는다.
+    ws.getCell(row, 2).value = formatDatetimeCell(ev.datetime);            // B 발생일시
+    ws.getCell(row, 3).value = ev.fid_name || ev.facility_id || "";        // C 설비/위치
+    ws.getCell(row, 4).value = ev.worker || "";                           // D 점검자
+    ws.getCell(row, 8).value = ev.memo || "";                             // H 상황발생 내용
+    ws.getCell(row, 9).value = buildProgressText(ev.history);             // I 진행현황
 
-    const statusCell = ws.getCell(row, 11);                               // K 상태
+    const statusCell = ws.getCell(row, 12);                               // L 상태
     const lastHistory = Array.isArray(ev.history) && ev.history.length > 0
       ? ev.history[ev.history.length - 1] : null;                        // 현재 상태로 바뀐 시점
     const statusAt = lastHistory ? fmtTimestampKst(lastHistory.at) : "";
@@ -248,9 +255,7 @@ async function buildReportWorkbook({ center, start, end, events }) {
       color: { argb: REPORT_STATUS_COLOR[ev.status] || "FF000000" },
     };
 
-    // [2026-07-23] 상황발생 내용/진행현황이 길어서 셀보다 넘치면 행 높이를 늘림 —
-    // 평소(사진 들어가는 짧은 내용)엔 사진 기준 최소 높이 그대로.
-    ws.getRow(row).height = computeRowHeight(ev.memo, progressText);
+    // 행 높이는 템플릿 값을 그대로 둔다 (위 "행 높이" 주석 참고 — 의도된 무동작)
 
     const photos = await resolvePhotoBuffers(ev);
     await embedPhotos(wb, ws, row, photos);
@@ -280,12 +285,12 @@ async function buildReportWorkbook({ center, start, end, events }) {
   }
 
   // 매핑 후 실제 마지막 행 기준으로 인쇄범위를 매번 다시 계산해서 맞춘다
-  // (템플릿 원본값 "A1:K106"에 고정돼 있으면 실제 데이터와 어긋남).
-  // ExcelJS가 printArea 문자열을 쓸 때 열(A/K)엔 "$"를 자동으로 붙이면서 행 번호엔 안
-  // 붙이는 버릇이 있어서, 행 번호 쪽에 "$"를 직접 넣어 정상적인 "$A$1:$K$7" 형태로 나오게 함
+  // (템플릿 원본값 "A1:L106"에 고정돼 있으면 실제 데이터와 어긋남).
+  // ExcelJS가 printArea 문자열을 쓸 때 열(A/L)엔 "$"를 자동으로 붙이면서 행 번호엔 안
+  // 붙이는 버릇이 있어서, 행 번호 쪽에 "$"를 직접 넣어 정상적인 "$A$1:$L$7" 형태로 나오게 함
   // (이 자체가 손상 경고의 원인은 아니었지만 — 진짜 원인은 아래 writeReportBuffer 참고 —
   //  절대참조 형태를 맞춰두는 게 맞아서 그대로 둠).
-  ws.pageSetup.printArea = `A$1:K$${finalLastRow}`;
+  ws.pageSetup.printArea = `A$1:${REPORT_LAST_COL}$${finalLastRow}`;
 
   return wb;
 }

@@ -166,7 +166,7 @@ exports.onIssueUpdate = onDocumentUpdated(
     const adminEmails = await getAdminEmails(center_name);
     const lastHistory = (after.history || []).slice(-1)[0] || {};
 
-    if (after.status === "조치중") {
+    if (after.status === "진행중") {
       await sendMail(adminEmails, `[조치 진행] ${center_name} - ${facility_id} - ${forSubject(memo)}`,
         makeEmailHtml({ title: "🟡 이벤트 조치가 시작되었습니다", center_name, facility_id, worker: lastHistory.by || "", workerLabel: "작성자", datetime, memo: lastHistory.content || "", actionUrl: eventUrl }));
     } else if (after.status === "완료") {
@@ -190,7 +190,9 @@ exports.issueReminderScheduler = onSchedule(
     let snap;
     try {
       snap = await db.collection("events")
-        .where("status", "in", ["발생", "조치중"])
+        // "조치중"은 2026-08-14에 "진행중"으로 바뀌었다. 전환 시점에 그 상태인 문서가
+        // 0건인 걸 확인하고 바꿨지만, 옛 이름이 남아 있어도 알림에서 빠지지 않도록 둘 다 본다.
+        .where("status", "in", ["발생", "진행중", "조치중"])
         .where("last_notified_at", "<=", threshold)
         .get();
     } catch (e) {

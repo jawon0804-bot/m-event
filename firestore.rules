@@ -35,7 +35,7 @@ service cloud.firestore {
     }
 
     // events: 생성은 onInspectionLog 트리거(Admin SDK)만 함.
-    // 상태 변경(조치중/완료)은 m-event 화면이 클라이언트에서 직접 update.
+    // 상태 변경(진행중/완료)은 m-event 화면이 클라이언트에서 직접 update.
     //
     // ⚠️ [2026-07-29 수정] update가 `resource.data`(수정 **전** 값)만 보고 있었다.
     //   그래서 자기 센터 이벤트를 수정하면서 center_name을 남의 센터로 바꿔 넘기면
