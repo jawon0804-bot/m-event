@@ -2,7 +2,9 @@
  * Firebase Functions (2nd Gen) - M-Event 이슈 트래커 + 근무일지
  *
  * [트리거/스케줄]
- *   onInspectionLog        : inspection_logs 문서 생성/수정 시 memo 필드 감지 → events 생성 + 메일
+ *   onInspectionLog        : inspection_logs 문서 생성/수정 시 특이사항 감지 → events 생성 + 메일
+ *                            (하단 종합 메모 `memo` + 항목별 특이사항 `results[].note`를 합쳐서 판단.
+ *                             2026-08-14 이전엔 memo만 봐서, 항목별 특이사항은 저장돼도 이슈가 안 생겼다)
  *   onIssueUpdate          : events 문서 status 변경 시 → 조치/완료 메일
  *   issueReminderScheduler : 매일 09:00 (Asia/Seoul) — 3일 이상 미조치 이벤트 재알림
  *   workLogDailyExport     : 매일 09:00 (Asia/Seoul) — 방금 끝난 근무일(어제 09:00~오늘 09:00)의

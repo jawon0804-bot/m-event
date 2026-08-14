@@ -168,7 +168,7 @@ const isAdminOrMaster = currentUser.active === true || currentUser.center_name =
 
 | 함수 이름 | 언제 실행되나요? | 무엇을 하나요? |
 |---|---|---|
-| `onInspectionLog` | M-SMART에서 점검 기록(`inspection_logs`)이 생성/수정되고 `memo`가 있을 때 | `events`에 새 이슈 생성 + 관리자에게 "새 이벤트 발생" 메일 |
+| `onInspectionLog` | M-SMART에서 점검 기록(`inspection_logs`)이 생성/수정되고 **특이사항이 있을 때** — 하단 종합 메모(`memo`) 또는 항목별 특이사항(`results[].note`) 중 하나라도 | `events`에 새 이슈 생성 + 관리자에게 "새 이벤트 발생" 메일 |
 | `onIssueUpdate` | `events` 문서의 `status`가 바뀔 때 | "조치 진행" 또는 "이벤트 완료" 메일 발송 |
 | `issueReminderScheduler` | 매일 09:00 (Asia/Seoul) | 3일 넘게 `완료`가 안 된 이슈를 찾아서 재알림 메일 |
 
@@ -246,6 +246,7 @@ M-SMART에서 이 때문에 버그 수정이 기기에 안 닿는 일이 실제�
 |---|---|---|---|
 | `tests/client-ip.test.js` | 로그인 잠금이 쓰는 클라이언트 IP 판정 (XFF의 **맨 뒤** 항목) | 불필요 | ✅ 배포 전 자동 실행 |
 | `tests/expected-count.test.js` | 월간 집계 기대 횟수 — **M-Engine(Python)과 같은 케이스 표** | 불필요 | ✅ 배포 전 자동 실행 |
+| `tests/issue-text.test.js` | 이슈 본문 합성 — 하단 종합 메모 + **항목별 특이사항(`results[].note`)** + 메일 제목 축약 | 불필요 | ✅ 배포 전 자동 실행 |
 | `tests/storage-rules.test.js` | `storage.rules`를 실제 규칙 엔진(TestRuleset)에 돌려 22개 케이스 검증 | **gcloud 로그인 필요** | ❌ 수동 |
 
 ```bash
