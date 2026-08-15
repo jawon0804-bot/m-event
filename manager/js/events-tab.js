@@ -494,14 +494,32 @@ function renderModalPhotos() {
             <div class="photo-thumb photo-thumb-loading"><span class="btn-spinner"></span></div>
             <div style="font-size:11px;color:var(--gray4);text-align:center;margin-top:4px">사진 처리 중</div>
           </div>` : `
-          <div class="photo-card-wrap">
+          <div class="photo-card-wrap is-loading">
             <img class="photo-thumb${c.kind === "done" ? " done" : ""}${c.pending ? " pending" : ""}"
                  data-idx="${idx}" src="${esc(c.url)}" alt="${esc(c.label || "사진")}"
                  ${c.fileName ? `title="${esc(c.fileName)}"` : ""}>
+            <span class="photo-veil"><span class="btn-spinner"></span></span>
             ${c.kind === "done" && isAdmin
               ? `<button class="photo-x" data-done-idx="${c.doneIdx}" title="첨부 취소">✕</button>` : ""}
             ${c.label ? `<div style="font-size:11px;color:var(--gray4);text-align:center;margin-top:4px">${esc(c.label)}</div>` : ""}
           </div>`).join("");
+
+  // 이미지가 실제로 내려올 때까지 덮개(스피너)를 씌워둔다.
+  // URL을 아는 것과 사진이 보이는 건 다르다 — events.photos에 URL이 있으면 조회 단계가
+  // 통째로 생략되므로, 여기서 안 가려주면 대부분의 팝업에서 빈 칸만 보이다가 툭 나타난다
+  // (버킷이 US-CENTRAL1이라 장당 0.5초 이상 걸린다). 칸 크기를 미리 잡아 화면 밀림도 막는다.
+  grid.querySelectorAll(".photo-card-wrap.is-loading").forEach(wrap => {
+    const img = wrap.querySelector("img");
+    if (!img) return;
+    const settle = ok => {
+      wrap.classList.remove("is-loading");
+      if (!ok) wrap.classList.add("is-error");
+    };
+    // 캐시에 있으면 핸들러를 걸기 전에 이미 끝나 있다 — complete로 먼저 확인한다
+    if (img.complete) { settle(img.naturalWidth > 0); return; }
+    img.addEventListener("load",  () => settle(true),  { once: true });
+    img.addEventListener("error", () => settle(false), { once: true });
+  });
 
   grid.querySelectorAll(".photo-thumb").forEach(img => {
     img.addEventListener("click", () => openEventViewer(cards[Number(img.dataset.idx)].url));

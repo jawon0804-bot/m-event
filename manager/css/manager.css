@@ -405,6 +405,21 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   display: flex; align-items: center; justify-content: center;
   background: var(--gray0); border: 1px dashed var(--gray2);
 }
+
+/* 이미지가 내려오는 동안 썸네일 위에 씌우는 덮개.
+   img는 자리를 그대로 차지하고 있어서(100×80) 사진이 뜰 때 화면이 밀리지 않는다. */
+.photo-veil {
+  position: absolute; left: 0; top: 0; width: 100px; height: 80px;
+  border-radius: 6px; background: var(--gray0); border: 1px solid var(--gray2);
+  display: flex; align-items: center; justify-content: center;
+}
+.photo-card-wrap:not(.is-loading):not(.is-error) .photo-veil { display: none; }
+.photo-card-wrap.is-error .photo-veil { border-style: dashed; }
+.photo-card-wrap.is-error .photo-veil .btn-spinner { display: none; }
+.photo-card-wrap.is-error .photo-veil::after {
+  content: "불러올 수 없음"; font-size: 11px; color: var(--gray3);
+}
+.photo-veil .btn-spinner { border-color: var(--gray2); border-top-color: var(--navy); }
 .photo-x {
   position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
   border-radius: 50%; border: none; background: var(--red); color: #fff;
