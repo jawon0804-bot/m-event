@@ -11,6 +11,30 @@ function fmtDate(ts) {
   const p = n => String(n).padStart(2,"0");
   return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+// ── 처리 결과 알림 (토스트) ───────────────────────────────────────────────
+// alert()은 확인을 누를 때까지 화면을 막아서, 저장처럼 "됐다"만 알리면 되는 곳엔 과하다.
+let toastTimer = null;
+function showToast(text, isError) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "toast show" + (isError ? " error" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = "toast" + (isError ? " error" : ""); }, 2600);
+}
+
+// 버튼을 잠그고 스피너를 돌린 뒤 원래대로 되돌린다.
+// 되돌리기를 finally에 두는 이유: 실패해도 버튼이 잠긴 채 남으면 다시 시도할 수 없다.
+// (그 사이 화면이 다시 그려져 버튼이 교체됐다면 떨어져 나간 노드를 복원하는 것뿐이라 무해하다)
+async function withSpinner(btn, label, fn) {
+  if (!btn) return fn();
+  const html = btn.innerHTML, wasDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="btn-spinner"></span>${esc(label)}`;
+  try { return await fn(); }
+  finally { btn.innerHTML = html; btn.disabled = wasDisabled; }
+}
+
 // HTML 이스케이프 — 작은따옴표(')까지 처리 (속성 값 삽입 시 안전)
 function esc(s) {
   return String(s ?? "")

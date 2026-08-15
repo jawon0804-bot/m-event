@@ -395,15 +395,12 @@
       </div>
       <button class="close-btn" onclick="closeModal()">✕</button>
     </div>
+    <!-- 점검 사진(최대 3장) + 완료 사진(최대 2장)을 한 줄에 같이 둔다.
+         섹션을 나눴더니 팝업이 길어져 완료 처리 버튼까지 스크롤해야 했다(2026-08-15 수정). -->
     <div class="photo-section" id="photo-section">
-      <h4>📷 첨부 사진</h4>
+      <h4>📷 사진 <span class="photo-hint">완료 사진(✅)은 보고서 완료사진 열에 자동으로 들어갑니다 · 최대 2장</span></h4>
       <div class="photo-grid" id="photo-grid"></div>
-    </div>
-    <!-- 완료 사진: 관리자가 완료 처리하면서 올리는 증빙. 보고서 J·K열에 자동 삽입된다. -->
-    <div class="photo-section" id="done-photo-section">
-      <h4>✅ 완료 사진 <span class="done-photo-hint">보고서 완료사진 열에 자동으로 들어갑니다 (최대 2장)</span></h4>
-      <div class="photo-grid" id="done-photo-grid"></div>
-      <div class="done-photo-actions" id="done-photo-actions"></div>
+      <div class="photo-actions" id="photo-actions"></div>
     </div>
     <div class="timeline" id="modal-timeline"></div>
     <div class="modal-action" id="modal-action"></div>
@@ -423,6 +420,9 @@
   <button style="position:absolute;top:20px;right:20px;background:none;border:none;color:#fff;font-size:32px;cursor:pointer;" onclick="closeEventViewer()">✕</button>
   <img id="event-viewer-img" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;">
 </div>
+
+<!-- 처리 결과 알림 (저장/완료 후 잠깐 떴다 사라진다) -->
+<div class="toast" id="toast"></div>
 
 <script src="js/config.js"></script>
 <script src="js/utils.js"></script>

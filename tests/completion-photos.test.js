@@ -1,20 +1,18 @@
 // tests/completion-photos.test.js
-// 완료 사진 업로드의 "자리(slot) 계산"과 저장 경로 규칙을 고정한다.
+// 완료 사진 초안(draft) → 저장 반영 규칙을 고정한다.
 //
 // 실행:
 //   node tests/completion-photos.test.js
 //
 // [왜 이 테스트가 있는가]
-// 완료 사진은 파일명의 순번이 곧 **보고서 J·K열의 자리**이고, 동시에 **교체 수단**이다
-// (같은 경로에 덮어쓰는 게 교체다 — Storage 규칙에서 delete는 안 열었다).
-// 그래서 여기서 인덱스가 하나만 어긋나면 증상이 이렇게 나온다:
-//   · 추가로 올린 사진이 1번 자리를 덮어써서 **앞 사진이 소리 없이 사라진다**
-//   · 교체했는데 2번 자리에 붙어서 옛 사진이 그대로 남는다
-// 둘 다 에러 없이 "사진이 이상하다"로만 나타나서 원인을 찾기 어렵다.
-//
-// ⚠️ 여기서 검증하지 않는 것: put() 뒤에 getDownloadURL()을 다시 받는지.
-//   같은 경로를 덮어쓰면 GCS가 메타데이터를 교체해 다운로드 토큰이 새로 발급되므로
-//   **이전 URL은 죽는다.** 그 순서는 uploadDonePhotos 안에 주석으로 고정해 뒀다.
+// 완료 사진은 화면에서 고르고 X로 빼는 초안을 만든 뒤, [완료 처리]나 [첨부 완료]를 누를 때
+// 한 번에 반영된다. 이 반영 로직이 틀어지면 증상이 전부 "조용한" 형태로 나온다:
+//   · 남겨둔 사진이 사라지거나, 뺀 사진이 그대로 남는다
+//   · **새로 올린 파일이 남아 있는 사진의 파일을 덮어써서**, 그 사진의 URL까지 죽는다
+//     (덮어쓰면 GCS가 메타데이터를 교체해 Firebase 다운로드 토큰이 새로 발급되기 때문 —
+//      화면·보고서에는 깨진 이미지로만 보이고 에러는 안 난다)
+// 마지막 항목 때문에 2026-08-15에 파일명을 자리 번호(_1/_2)에서 시각+난수로 바꿨다.
+// 아래 "덮어쓰지 않는다" 케이스가 그 결정을 지킨다.
 //
 // [왜 require 대신 소스에서 함수를 떼어내는가]
 // events-tab.js는 브라우저용 전역 스크립트라 module.exports가 없다. 다른 테스트
@@ -24,34 +22,40 @@ const path = require("path");
 
 const SRC = path.join(__dirname, "..", "manager", "js", "events-tab.js");
 
-// 업로드된 경로를 기록하는 storage 스텁
+// ── 브라우저/Firebase 스텁 ──────────────────────────────────────────────
 const puts = [];
 const storage = {
   ref(p) {
     return {
       put: async () => { puts.push(p); },
-      getDownloadURL: async () => `https://example.test/${p}?token=${puts.length}`,
+      getDownloadURL: async () => `https://fs.test/${p}?token=t${puts.length}`,
     };
   },
 };
 let savedPatch = null;
 const db = { collection: () => ({ doc: () => ({ update: async patch => { savedPatch = patch; } }) }) };
 const firebase = { firestore: { FieldValue: { serverTimestamp: () => "TS" } } };
+const URLStub = { createObjectURL: () => "blob:preview", revokeObjectURL: () => {} };
 
 function loadHelpers() {
   const src = fs.readFileSync(SRC, "utf8");
   const start = src.indexOf("const MAX_DONE_PHOTOS");
-  const end = src.indexOf("function setDonePhotoMsg");
+  const end = src.indexOf("function renderModalPhotos");
   if (start < 0 || end < 0) {
     throw new Error("events-tab.js에서 완료사진 헬퍼 구간을 찾지 못했습니다 — 소스 구조가 바뀌었는지 확인하세요.");
   }
   const snippet = src.slice(start, end);
-  const factory = new Function("storage", "db", "firebase",
-    `${snippet}; return { MAX_DONE_PHOTOS, uploadDonePhotos, saveDonePhotoUrls };`);
-  return factory(storage, db, firebase);
+  const factory = new Function("storage", "db", "firebase", "URL", "renderModalPhotos", "showToast",
+    `${snippet};
+     return {
+       MAX_DONE_PHOTOS, uploadDonePhotos, commitDoneDraft, isDoneDraftDirty,
+       resetDoneDraft, removeDonePhoto,
+       getDraft: () => doneDraft, setDraft: d => { doneDraft = d; },
+     };`);
+  return factory(storage, db, firebase, URLStub, () => {}, () => {});
 }
 
-const { MAX_DONE_PHOTOS, uploadDonePhotos, saveDonePhotoUrls } = loadHelpers();
+const H = loadHelpers();
 
 let failed = 0;
 function eq(name, got, want) {
@@ -62,51 +66,76 @@ function eq(name, got, want) {
   if (!ok) { console.log(`      got : ${g}`); console.log(`      want: ${w}`); }
 }
 
-const EV = () => ({ id: "log_ABC", center_name: "본사" });
-const blobs = n => Array(n).fill("blob");
+const EV = extra => ({ id: "log_ABC", center_name: "본사", ...extra });
+const NEW = () => ({ kind: "new", blob: "blob", previewUrl: "blob:preview" });
+const SAVED = url => ({ kind: "saved", url });
 
 (async () => {
-  eq("보고서 완료사진 열이 2개이므로 상한도 2", MAX_DONE_PHOTOS, 2);
+  eq("보고서 완료사진 열이 2개이므로 상한도 2", H.MAX_DONE_PHOTOS, 2);
 
-  // ── 처음 2장 올리기 ────────────────────────────────────────────────
+  // ── 파일명: 자리 번호로 덮어쓰지 않는다 ─────────────────────────────
   puts.length = 0;
   let ev = EV();
-  let urls = await uploadDonePhotos(ev, blobs(2), 0);
-  eq("경로는 {eventId}_{1-based 순번}.jpg — 순번이 곧 J·K 자리",
-    puts, ["completion_photos/본사/log_ABC_1.jpg", "completion_photos/본사/log_ABC_2.jpg"]);
-  await saveDonePhotoUrls(ev, urls, 0);
-  eq("문서에 2장이 순서대로 저장된다", ev.completion_photos.length, 2);
-  eq("저장 필드 이름", Object.keys(savedPatch).sort(), ["completion_photos", "updated_at"]);
+  await H.uploadDonePhotos(ev, ["b1", "b2"]);
+  eq("한 번에 올린 2장은 서로 다른 파일", new Set(puts).size, 2);
+  const first = [...puts];
+  await H.uploadDonePhotos(ev, ["b3"]);
+  eq("나중에 올린 파일은 앞서 올린 파일과 겹치지 않는다(덮어쓰기 금지)",
+    first.includes(puts[puts.length - 1]), false);
+  eq("경로 규칙", /^completion_photos\/본사\/log_ABC_[0-9a-z]+_1\.jpg$/.test(first[0]), true);
 
-  // ── 1장 있는 상태에서 1장 추가 (startIndex = 기존 장수) ─────────────
+  // ── 초안 반영: 기존 유지 + 새로 올린 것 ─────────────────────────────
   puts.length = 0;
-  ev = { ...EV(), completion_photos: ["OLD1"] };
-  urls = await uploadDonePhotos(ev, blobs(1), 1);
-  eq("추가 업로드는 2번 자리에 올라간다(1번을 덮지 않는다)",
-    puts, ["completion_photos/본사/log_ABC_2.jpg"]);
-  await saveDonePhotoUrls(ev, urls, 1);
-  eq("기존 1번 사진이 그대로 남는다", ev.completion_photos[0], "OLD1");
-  eq("새 사진은 2번 자리", ev.completion_photos.length, 2);
+  ev = EV({ completion_photos: ["SAVED_A"] });
+  H.setDraft([SAVED("SAVED_A"), NEW()]);
+  let r = await H.commitDoneDraft(ev);
+  eq("기존 1장은 그대로 두고 새 1장만 올린다", puts.length, 1);
+  eq("순서는 초안 순서 그대로", ev.completion_photos[0], "SAVED_A");
+  eq("총 2장", r.total, 2);
+  eq("저장 필드", Object.keys(savedPatch).sort(), ["completion_photos", "updated_at"]);
+  eq("저장 후 초안은 전부 saved로 바뀐다", H.getDraft().every(d => d.kind === "saved"), true);
 
-  // ── 꽉 찬 상태에서 교체 (startIndex = 0) ───────────────────────────
+  // ── X로 뺀 사진은 문서에서 빠진다 ───────────────────────────────────
   puts.length = 0;
-  ev = { ...EV(), completion_photos: ["OLD1", "OLD2"] };
-  urls = await uploadDonePhotos(ev, blobs(2), 0);
-  eq("교체는 1번 자리부터 같은 경로에 덮어쓴다",
-    puts, ["completion_photos/본사/log_ABC_1.jpg", "completion_photos/본사/log_ABC_2.jpg"]);
-  await saveDonePhotoUrls(ev, urls, 0);
-  eq("교체 후 옛 URL은 남지 않는다",
-    ev.completion_photos.some(u => String(u).startsWith("OLD")), false);
+  ev = EV({ completion_photos: ["SAVED_A", "SAVED_B"] });
+  H.resetDoneDraft(ev);
+  H.removeDonePhoto(0);                       // 1번 사진에 X
+  await H.commitDoneDraft(ev);
+  eq("X로 뺀 사진은 문서에서 사라진다", ev.completion_photos, ["SAVED_B"]);
+  eq("남은 사진은 다시 올리지 않는다(업로드 0건)", puts.length, 0);
 
-  // ── 1장만 교체하면 2번은 유지 ───────────────────────────────────────
-  ev = { ...EV(), completion_photos: ["OLD1", "OLD2"] };
-  await saveDonePhotoUrls(ev, ["NEW1"], 0);
-  eq("1번만 교체하면 2번은 그대로", ev.completion_photos, ["NEW1", "OLD2"]);
+  // ⭐ 회귀 방지 핵심: 하나를 빼고 새로 한 장을 넣어도, 남아 있는 사진의 파일을 안 건드린다.
+  //   예전 방식(자리 번호 파일명)이면 새 사진이 _1.jpg로 올라가 남은 사진 파일을 덮어썼다.
+  puts.length = 0;
+  ev = EV({ completion_photos: ["https://fs.test/completion_photos/본사/log_ABC_old_2.jpg?token=t9"] });
+  H.setDraft([SAVED(ev.completion_photos[0]), NEW()]);
+  await H.commitDoneDraft(ev);
+  eq("새 파일이 남아 있는 사진의 파일 경로와 겹치지 않는다",
+    puts.some(p => p.includes("log_ABC_old_2")), false);
 
-  // ── 상한 초과 방지 ─────────────────────────────────────────────────
-  ev = { ...EV(), completion_photos: ["OLD1", "OLD2"] };
-  await saveDonePhotoUrls(ev, ["X", "Y"], 2);
-  eq("상한을 넘겨 저장해도 배열은 2장으로 잘린다", ev.completion_photos.length, MAX_DONE_PHOTOS);
+  // ── 전부 빼면 빈 배열로 저장 ────────────────────────────────────────
+  ev = EV({ completion_photos: ["SAVED_A", "SAVED_B"] });
+  H.setDraft([]);
+  await H.commitDoneDraft(ev);
+  eq("전부 X 하면 빈 배열", ev.completion_photos, []);
+
+  // ── 상한 ────────────────────────────────────────────────────────────
+  ev = EV();
+  H.setDraft([NEW(), NEW(), NEW()]);
+  await H.commitDoneDraft(ev);
+  eq("상한을 넘겨도 2장까지만 저장", ev.completion_photos.length, H.MAX_DONE_PHOTOS);
+
+  // ── 저장 버튼 활성화 판정 ───────────────────────────────────────────
+  ev = EV({ completion_photos: ["A", "B"] });
+  H.resetDoneDraft(ev);
+  eq("초안이 저장 상태와 같으면 dirty 아님", H.isDoneDraftDirty(ev), false);
+  H.removeDonePhoto(1);
+  eq("한 장 빼면 dirty", H.isDoneDraftDirty(ev), true);
+  H.resetDoneDraft(ev);
+  H.setDraft([SAVED("B"), SAVED("A")]);
+  eq("순서만 바뀌어도 dirty", H.isDoneDraftDirty(ev), true);
+  H.setDraft([SAVED("A"), SAVED("B"), NEW()]);
+  eq("새로 고른 게 있으면 dirty", H.isDoneDraftDirty(ev), true);
 
   console.log(failed === 0 ? "\n모든 케이스 통과" : `\n${failed}건 실패`);
   process.exit(failed === 0 ? 0 : 1);

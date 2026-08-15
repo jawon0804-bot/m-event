@@ -382,18 +382,49 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .completed-msg { text-align: center; padding: 16px; color: var(--green); font-weight: 600; }
 
 /* ── 완료 사진 (보고서 J·K열로 나가는 증빙) ── */
-.done-photo-hint    { font-weight: 400; color: var(--gray3); margin-left: 4px; }
-.done-photo-actions { padding-bottom: 16px; }
+.photo-hint     { font-weight: 400; color: var(--gray3); margin-left: 4px; }
+.photo-actions  { padding-bottom: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .btn-photo {
   background: #fff; color: var(--navy); border: 1px solid var(--gray2);
   padding: 8px 14px; font-size: 13px;
 }
 .btn-photo:hover:not(:disabled) { background: var(--gray0); }
 .btn-photo:disabled { color: var(--gray3); cursor: default; }
-.done-photo-msg { font-size: 12px; color: var(--gray4); margin-top: 8px; }
+.btn-save { background: var(--navy); color: #fff; padding: 8px 14px; font-size: 13px; }
+.btn-save:hover:not(:disabled) { background: var(--navy2); }
+.btn-save:disabled { background: var(--gray2); color: var(--gray4); cursor: default; }
+.done-photo-msg { font-size: 12px; color: var(--gray4); width: 100%; }
 .done-photo-msg.error { color: var(--red); }
-/* 첨부 대기 중(아직 업로드 전) 썸네일은 점선 테두리로 구분 */
-.photo-thumb.pending { border: 2px dashed var(--navy2); opacity: .75; }
+
+/* 사진 카드 — 완료 사진은 X 버튼으로 취소할 수 있다 */
+.photo-card-wrap { position: relative; }
+.photo-thumb.done    { border: 2px solid var(--green); }
+.photo-thumb.pending { border: 2px dashed var(--navy2); opacity: .8; }
+.photo-x {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
+  border-radius: 50%; border: none; background: var(--red); color: #fff;
+  font-size: 12px; line-height: 1; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.photo-x:hover { background: #b91c1c; }
+
+/* 버튼 안에서 도는 작은 스피너 */
+.btn-spinner {
+  width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.45);
+  border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;
+  display: inline-block; vertical-align: -2px; margin-right: 6px;
+}
+.btn-photo .btn-spinner { border-color: var(--gray2); border-top-color: var(--navy); }
+
+/* 처리 결과 토스트 */
+.toast {
+  position: fixed; top: 24px; left: 50%; transform: translateX(-50%) translateY(-12px);
+  background: var(--navy); color: #fff; padding: 12px 22px; border-radius: 8px;
+  font-size: 14px; font-weight: 600; z-index: 500; box-shadow: 0 6px 20px rgba(0,0,0,.2);
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+}
+.toast.show  { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.error { background: var(--red); }
 
 /* ── 페이지네이션 ── */
 .pagination { display: flex; justify-content: center; gap: 6px; padding: 16px; flex-wrap: wrap; }
