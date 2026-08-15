@@ -186,6 +186,17 @@ async function submitAction(type, btn) {
 
   try {
     await withSpinner(btn, type === "완료" ? "완료 처리 중..." : "저장 중...", async () => {
+      // [2026-08-15] 사진을 **먼저** 올리고 문서는 **한 번만** 쓴다.
+      // 예전엔 상태를 저장한 뒤 사진을 또 저장해서 서울(Firestore) 왕복이 두 번 났다.
+      // ⚠️ 사진이 실패해도 완료 처리는 그대로 진행한다 — 사진 때문에 업무 흐름이 막히는
+      //   쪽이 더 나쁘다. 그래서 아래에서 completion_photos 필드만 빼고 저장한다.
+      //   못 올린 건 완료 탭에서 [완료 사진 첨부]로 다시 올리면 된다.
+      let photoUrls = null;
+      if (type === "완료" && isDoneDraftDirty(ev)) {
+        try { photoUrls = await resolveDraftUrls(ev); }
+        catch (e) { console.error("완료사진 업로드 오류:", e); photoFailed = true; }
+      }
+
       await db.collection("events").doc(ev.id).update({
         status:           type,
         history:          firebase.firestore.FieldValue.arrayUnion({
@@ -194,15 +205,9 @@ async function submitAction(type, btn) {
         last_notified_at: firebase.firestore.Timestamp.now(),
         updated_at:       firebase.firestore.FieldValue.serverTimestamp(),
         ...(type==="완료" ? { completed_at: firebase.firestore.FieldValue.serverTimestamp() } : {}),
+        ...(photoUrls ? { completion_photos: photoUrls } : {}),
       });
-
-      // 완료 처리와 함께 첨부한 사진 저장.
-      // ⚠️ 실패해도 완료 처리는 되돌리지 않는다 — 사진 때문에 업무 흐름이 막히는 쪽이 더 나쁘다.
-      //   못 올린 건 완료 탭에서 다시 첨부하면 된다.
-      if (type === "완료" && isDoneDraftDirty(ev)) {
-        try { await commitDoneDraft(ev); }
-        catch (e) { console.error("완료사진 저장 오류:", e); photoFailed = true; }
-      }
+      if (photoUrls) applyDoneUrls(ev, photoUrls);
     });
     closeModal();
     if (photoFailed) {
@@ -282,6 +287,8 @@ const DONE_PHOTO_QUALITY   = 0.85;
 
 // 완료 사진 초안: { kind:"saved", url } | { kind:"new", blob, previewUrl }
 let doneDraft = [];
+// 압축이 끝나기 전까지 그리드에 띄워둘 "처리 중" 카드 수
+let donePlaceholders = 0;
 
 // 파일 → 캔버스로 축소 → JPEG Blob. 1600px/85%면 장당 300~400KB로, 판독에 필요한
 // 해상도는 남기면서 업로드가 빠르다 (M-SMART가 2400px에서 되돌린 값과 같은 근거).
@@ -311,7 +318,11 @@ function compressToJpeg(file) {
 // 파일 선택창을 열어 압축된 Blob 배열을 돌려준다 (최대 limit장).
 // 취소하면 change 이벤트가 안 와서 resolve되지 않는데, 호출부가 그 전에 UI를 잠그지
 // 않으므로 그대로 둔다 — 취소 시 아무 일도 일어나지 않는 게 맞다.
-function pickPhotoBlobs(limit) {
+//
+// onFilesChosen: 파일을 고른 직후(압축 시작 전) 장수를 알려준다. 압축이 메인 스레드를
+//   잡기 때문에, 호출부가 이 시점에 "처리 중" 표시를 그려두지 않으면 사용자에겐 아무
+//   반응 없는 정지 구간으로 보인다.
+function pickPhotoBlobs(limit, onFilesChosen) {
   return new Promise(resolve => {
     const input = document.createElement("input");
     input.type = "file";
@@ -319,6 +330,7 @@ function pickPhotoBlobs(limit) {
     input.multiple = limit > 1;
     input.onchange = async e => {
       const files = Array.from(e.target.files || []).slice(0, limit);
+      if (files.length > 0 && onFilesChosen) await onFilesChosen(files.length);
       const blobs = [];
       for (const f of files) {
         try { blobs.push(await compressToJpeg(f)); }
@@ -339,40 +351,54 @@ function pickPhotoBlobs(limit) {
 //   (_1/_2)로 덮어썼는데, X로 사진을 빼면 자리가 밀려서 **남아 있는 사진의 파일을 덮어써**
 //   그 사진의 URL까지 죽는다(토큰이 바뀌므로). 순서는 문서의 배열이 정하니 파일명이
 //   자리를 뜻할 필요가 없다.
+//
+// ⚡ [2026-08-15] 순차 → 병렬. M-SMART submit.js가 2026-08-01에 같은 전환을 하면서 남긴
+//   실측이 근거다: **장당 4~5초, 파일이 134~455KB로 작은데도** 그랬다. 즉 전송량보다
+//   요청 왕복 비용이 지배적이라 겹쳐 보내면 장수가 늘어도 총 시간이 거의 안 는다.
+//   이 프로젝트의 Storage 버킷은 US-CENTRAL1(서울이 아님)이라 왕복 비용이 특히 크다.
+//   Promise.all은 입력 순서를 보존하므로 보고서 J·K 순서도 안 뒤바뀐다.
 async function uploadDonePhotos(ev, blobs) {
   // 시각 + 난수 4자리. 시각만 쓰면 같은 밀리초에 두 번 저장할 때 겹칠 수 있고,
   // 겹치는 순간 덮어쓰기가 되어 위에 적은 토큰 무효화 문제가 그대로 재현된다.
   const stamp = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const urls = [];
-  for (let i = 0; i < blobs.length; i++) {
-    const ref = storage.ref(`completion_photos/${ev.center_name}/${ev.id}_${stamp}_${i + 1}.jpg`);
-    await ref.put(blobs[i], { contentType: "image/jpeg" });
-    urls.push(await ref.getDownloadURL());
-  }
-  return urls;
+  return Promise.all(blobs.map(async (blob, i) => {
+    const ref  = storage.ref(`completion_photos/${ev.center_name}/${ev.id}_${stamp}_${i + 1}.jpg`);
+    const snap = await ref.put(blob, { contentType: "image/jpeg" });
+    return snap.ref.getDownloadURL();
+  }));
 }
 
 // 초안을 스토리지·문서에 반영한다. 새로 고른 것만 올리고, 최종 순서는 초안 순서 그대로다.
 // X로 뺀 사진의 Storage 파일은 남는다 — 규칙에서 delete를 안 열었기 때문이고, 문서에서
 // 빠지면 화면·보고서 어디에도 안 나오므로 사용자 눈에는 취소된 것과 같다.
-async function commitDoneDraft(ev) {
+// 새로 고른 것만 올려서 최종 URL 배열을 만든다. **문서는 쓰지 않는다** —
+// 완료 처리 흐름이 상태 변경과 사진을 문서 쓰기 한 번으로 합칠 수 있게 분리해 뒀다.
+async function resolveDraftUrls(ev) {
   const newItems = doneDraft.filter(d => d.kind === "new");
   const uploaded = newItems.length > 0 ? await uploadDonePhotos(ev, newItems.map(d => d.blob)) : [];
-
   let n = 0;
-  const urls = doneDraft
+  return doneDraft
     .map(d => d.kind === "saved" ? d.url : uploaded[n++])
     .filter(Boolean)
     .slice(0, MAX_DONE_PHOTOS);
+}
 
+// 저장된 결과를 화면 상태에 반영 (문서 쓰기는 호출부가 이미 했다는 전제)
+function applyDoneUrls(ev, urls) {
+  ev.completion_photos = urls;              // 화면 즉시 반영 (onSnapshot이 뒤이어 갱신한다)
+  doneDraft.forEach(d => { if (d.kind === "new") URL.revokeObjectURL(d.previewUrl); });
+  doneDraft = urls.map(url => ({ kind: "saved", url }));
+}
+
+// [첨부 완료] 전용 — 사진만 저장한다(상태 변경 없음)
+async function commitDoneDraft(ev) {
+  const urls = await resolveDraftUrls(ev);
   await db.collection("events").doc(ev.id).update({
     completion_photos: urls,
     updated_at: firebase.firestore.FieldValue.serverTimestamp(),
   });
-  ev.completion_photos = urls;              // 화면 즉시 반영 (onSnapshot이 뒤이어 갱신한다)
-  newItems.forEach(d => URL.revokeObjectURL(d.previewUrl));
-  doneDraft = urls.map(url => ({ kind: "saved", url }));
-  return { total: urls.length, added: uploaded.length };
+  applyDoneUrls(ev, urls);
+  return { total: urls.length };
 }
 
 // 초안이 저장된 상태와 다른가 (= 저장 버튼을 켤지 판단)
@@ -397,9 +423,19 @@ function removeDonePhoto(idx) {
 async function pickDonePhotos() {
   const room = MAX_DONE_PHOTOS - doneDraft.length;
   if (room <= 0) { showToast(`완료 사진은 최대 ${MAX_DONE_PHOTOS}장입니다.`, true); return; }
-  const blobs = await pickPhotoBlobs(room);
-  blobs.forEach(blob => doneDraft.push({ kind: "new", blob, previewUrl: URL.createObjectURL(blob) }));
-  renderModalPhotos();
+  try {
+    // 고른 직후 자리표시를 먼저 그리고 한 프레임 양보한 뒤에 압축이 시작된다
+    // (양보가 없으면 표시가 화면에 나오기 전에 메인 스레드가 막혀 아무것도 안 보인다)
+    const blobs = await pickPhotoBlobs(room, async count => {
+      donePlaceholders = count;
+      renderModalPhotos();
+      await nextPaint();
+    });
+    blobs.forEach(blob => doneDraft.push({ kind: "new", blob, previewUrl: URL.createObjectURL(blob) }));
+  } finally {
+    donePlaceholders = 0;
+    renderModalPhotos();
+  }
 }
 
 // 완료된 건의 [첨부 완료] — 여기서 스토리지에 저장한다
@@ -440,6 +476,8 @@ function renderModalPhotos() {
       pending: d.kind === "new",
       doneIdx: i,
     })),
+    // 압축이 끝나기 전 자리표시 (썸네일이 뜰 자리에 미리 칸을 잡아둔다)
+    ...Array.from({ length: donePlaceholders }, () => ({ kind: "placeholder" })),
   ];
 
   // 볼 사진도 없고 올릴 권한도 없으면 섹션을 통째로 감춘다
@@ -451,7 +489,11 @@ function renderModalPhotos() {
       ? `<div class="photo-loading"><span class="btn-spinner"></span>사진 불러오는 중...</div>`
       : cards.length === 0
         ? `<div class="no-photo">사진이 없습니다.</div>`
-        : cards.map((c, idx) => `
+        : cards.map((c, idx) => c.kind === "placeholder" ? `
+          <div class="photo-card-wrap">
+            <div class="photo-thumb photo-thumb-loading"><span class="btn-spinner"></span></div>
+            <div style="font-size:11px;color:var(--gray4);text-align:center;margin-top:4px">사진 처리 중</div>
+          </div>` : `
           <div class="photo-card-wrap">
             <img class="photo-thumb${c.kind === "done" ? " done" : ""}${c.pending ? " pending" : ""}"
                  data-idx="${idx}" src="${esc(c.url)}" alt="${esc(c.label || "사진")}"

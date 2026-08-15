@@ -400,6 +400,11 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .photo-card-wrap { position: relative; }
 .photo-thumb.done    { border: 2px solid var(--green); }
 .photo-thumb.pending { border: 2px dashed var(--navy2); opacity: .8; }
+/* 압축이 끝나기 전 자리표시 — 썸네일과 같은 크기로 칸을 잡아 화면이 안 튀게 한다 */
+.photo-thumb-loading {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gray0); border: 1px dashed var(--gray2);
+}
 .photo-x {
   position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
   border-radius: 50%; border: none; background: var(--red); color: #fff;

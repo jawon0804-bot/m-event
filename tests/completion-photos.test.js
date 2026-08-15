@@ -23,13 +23,14 @@ const path = require("path");
 const SRC = path.join(__dirname, "..", "manager", "js", "events-tab.js");
 
 // ── 브라우저/Firebase 스텁 ──────────────────────────────────────────────
+// put()은 실제 SDK처럼 스냅샷을 돌려준다(snap.ref.getDownloadURL()로 이어지는 형태).
+// 업로드 직후 그 참조에서 URL을 받아야 덮어쓴 경우의 새 토큰이 반영된다.
 const puts = [];
 const storage = {
   ref(p) {
-    return {
-      put: async () => { puts.push(p); },
-      getDownloadURL: async () => `https://fs.test/${p}?token=t${puts.length}`,
-    };
+    const ref = { getDownloadURL: async () => `https://fs.test/${p}?token=t${puts.length}` };
+    ref.put = async () => { puts.push(p); return { ref }; };
+    return ref;
   },
 };
 let savedPatch = null;
@@ -37,7 +38,9 @@ const db = { collection: () => ({ doc: () => ({ update: async patch => { savedPa
 const firebase = { firestore: { FieldValue: { serverTimestamp: () => "TS" } } };
 const URLStub = { createObjectURL: () => "blob:preview", revokeObjectURL: () => {} };
 
-function loadHelpers() {
+function loadHelpers() { return loadHelpersWith(storage); }
+
+function loadHelpersWith(storageImpl) {
   const src = fs.readFileSync(SRC, "utf8");
   const start = src.indexOf("const MAX_DONE_PHOTOS");
   const end = src.indexOf("function renderModalPhotos");
@@ -48,11 +51,11 @@ function loadHelpers() {
   const factory = new Function("storage", "db", "firebase", "URL", "renderModalPhotos", "showToast",
     `${snippet};
      return {
-       MAX_DONE_PHOTOS, uploadDonePhotos, commitDoneDraft, isDoneDraftDirty,
+       MAX_DONE_PHOTOS, uploadDonePhotos, resolveDraftUrls, commitDoneDraft, isDoneDraftDirty,
        resetDoneDraft, removeDonePhoto,
        getDraft: () => doneDraft, setDraft: d => { doneDraft = d; },
      };`);
-  return factory(storage, db, firebase, URLStub, () => {}, () => {});
+  return factory(storageImpl, db, firebase, URLStub, () => {}, () => {});
 }
 
 const H = loadHelpers();
@@ -83,6 +86,37 @@ const SAVED = url => ({ kind: "saved", url });
   eq("나중에 올린 파일은 앞서 올린 파일과 겹치지 않는다(덮어쓰기 금지)",
     first.includes(puts[puts.length - 1]), false);
   eq("경로 규칙", /^completion_photos\/본사\/log_ABC_[0-9a-z]+_1\.jpg$/.test(first[0]), true);
+
+  // ── 병렬 업로드 (회귀 방지) ─────────────────────────────────────────
+  // 순차로 되돌아가도 결과는 같아서 테스트가 안 잡힌다. 그런데 이 버킷은 US-CENTRAL1이라
+  // 왕복 비용이 지배적이고(M-SMART 실측: 장당 4~5초, 파일이 134~455KB인데도),
+  // 순차면 그 시간이 장수만큼 그대로 곱해진다. 동시 실행 여부로 확인한다.
+  {
+    let inFlight = 0, maxInFlight = 0;
+    const slowStorage = {
+      ref(p) {
+        const ref = { getDownloadURL: async () => `https://fs.test/${p}` };
+        ref.put = async () => {
+          inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+          await new Promise(r => setTimeout(r, 20));
+          inFlight--;
+          return { ref };
+        };
+        return ref;
+      },
+    };
+    const H2 = loadHelpersWith(slowStorage);
+    await H2.uploadDonePhotos(EV(), ["b1", "b2"]);
+    eq("2장을 동시에 올린다(순차로 되돌아가면 1)", maxInFlight, 2);
+  }
+
+  // ── resolveDraftUrls는 문서를 쓰지 않는다 ───────────────────────────
+  // 완료 처리 흐름이 상태 변경과 사진을 **문서 쓰기 한 번**으로 합칠 수 있으려면,
+  // URL을 만드는 단계에서 문서를 건드리면 안 된다.
+  savedPatch = null;
+  H.setDraft([NEW()]);
+  await H.resolveDraftUrls(EV());
+  eq("URL만 만들고 문서는 안 쓴다", savedPatch, null);
 
   // ── 초안 반영: 기존 유지 + 새로 올린 것 ─────────────────────────────
   puts.length = 0;

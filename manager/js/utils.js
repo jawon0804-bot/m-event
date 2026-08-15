@@ -23,6 +23,14 @@ function showToast(text, isError) {
   toastTimer = setTimeout(() => { el.className = "toast" + (isError ? " error" : ""); }, 2600);
 }
 
+// 방금 바꾼 화면이 실제로 그려질 틈을 준다.
+// 무거운 동기 작업(예: 사진 압축 — 디코딩·리사이즈·인코딩)은 메인 스레드를 잡으므로,
+// 이 양보 없이 바로 시작하면 "처리 중" 표시가 화면에 나오기 전에 멈춰서 사용자에겐
+// 아무 반응이 없는 것처럼 보인다. rAF를 두 번 걸어 한 번의 페인트를 확실히 보장한다.
+function nextPaint() {
+  return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+}
+
 // 버튼을 잠그고 스피너를 돌린 뒤 원래대로 되돌린다.
 // 되돌리기를 finally에 두는 이유: 실패해도 버튼이 잠긴 채 남으면 다시 시도할 수 없다.
 // (그 사이 화면이 다시 그려져 버튼이 교체됐다면 떨어져 나간 노드를 복원하는 것뿐이라 무해하다)
