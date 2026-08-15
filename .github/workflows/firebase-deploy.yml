@@ -30,6 +30,7 @@ jobs:
           node tests/permissions.test.js
           node tests/center-lock.test.js
           node tests/issue-text.test.js
+          node tests/completion-photos.test.js
 
       # ────────────────────────────────────────────────────────────────
       # 배포 대상 함수 목록을 functions/index.js의 exports에서 자동 생성한다.

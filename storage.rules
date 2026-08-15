@@ -99,6 +99,26 @@ service firebase.storage {
       // delete는 어떤 allow에도 없으므로 기본값(거부)이 적용된다.
     }
 
+    // ── 완료 사진 ────────────────────────────────────────────────
+    // [2026-08-14 신규] 이벤트 완료 처리 시 관리자가 m-event 화면에서 직접 올리는 증빙 사진.
+    // 이벤트 보고서의 완료사진1·2(J·K열)에 자동으로 삽입된다.
+    //   write: manager/js/events-tab.js의 uploadCompletionPhotos
+    //   read : 같은 파일의 완료사진 표시 (보고서 생성은 Admin SDK라 규칙 무관)
+    //
+    // 점검 사진(위)과 달리 **관리자만 쓸 수 있다.** 현장 점검자가 올리는 자료가 아니라
+    // 관리 주체가 보고서에 실어 내보내는 자료라 작성 주체를 좁혔다(2026-08-14 결정).
+    // 읽기는 센터 구성원 모두 허용 — 완료 팝업에서 누구나 결과를 확인할 수 있어야 한다.
+    //
+    // create/update만 허용하고 delete는 안 연다(위 inspection_photos와 같은 원칙).
+    // 잘못 올렸으면 같은 경로에 다시 올려 덮어쓰는 방식으로 교체한다.
+    // ⚠️ 덮어쓰면 GCS가 메타데이터를 통째로 교체해서 **다운로드 토큰이 새로 발급된다.**
+    //   즉 이전 URL은 죽는다 — 업로드 쪽은 put() 후 반드시 getDownloadURL()을 다시 받아
+    //   events 문서의 completion_photos를 갱신해야 한다(그 코드에 같은 주석을 달아뒀다).
+    match /completion_photos/{center}/{fileName} {
+      allow read: if ownsCenter(center);
+      allow create, update: if isAdmin() && ownsCenter(center);
+    }
+
     // ── M-Engine이 생성한 점검표 엑셀 ─────────────────────────────
     // 쓰기는 M-Engine(Admin SDK)만. 읽기는 m-event 엑셀 탭이 Maxerve_Excel의
     // storage_path를 getDownloadURL로 변환할 때 필요 (manager/js/excel-tab.js resolveExcelUrl).

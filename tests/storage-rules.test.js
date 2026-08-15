@@ -107,6 +107,21 @@ const cases = [
   ["[백필후] 직원(role=user): 자기 센터 사진 업로드는 계속 가능", "ALLOW", workerRole, photo, "create"],
   ["[백필후] 직원(role=user): 남의 센터 사진 업로드는 여전히 차단", "DENY", workerRole, `inspection_photos/${OTHER}/x_1.jpg`, "create"],
 
+  // ── 완료 사진(2026-08-14 신규): 쓰기는 관리자만, 읽기는 센터 구성원 ──
+  // 점검 사진과 달리 쓰기를 좁힌 이유: 현장 점검자가 남기는 기록이 아니라, 관리 주체가
+  // 보고서(완료사진1·2 열)에 실어 내보내는 자료라 작성 주체를 관리자로 한정했다.
+  // ⚠️ 아래 첫 줄이 "ALLOW"로 바뀌면 그 구분이 사라진 것이다.
+  ["[완료사진] 직원(role=user): 업로드 시도", "DENY", workerRole, `completion_photos/${CENTER}/e1_1.jpg`, "create"],
+  ["[완료사진] 관리자: 자기 센터 업로드", "ALLOW", adminRole, `completion_photos/${CENTER}/e1_1.jpg`, "create"],
+  // 같은 경로 덮어쓰기가 곧 '교체'다(삭제는 안 열었다). update가 막히면 교체 수단이 없어진다.
+  ["[완료사진] 관리자: 같은 경로 덮어쓰기(교체)", "ALLOW", adminRole, `completion_photos/${CENTER}/e1_1.jpg`, "update"],
+  ["[완료사진] 관리자: 삭제 시도", "DENY", adminRole, `completion_photos/${CENTER}/e1_1.jpg`, "delete"],
+  ["[완료사진] 관리자: 남의 센터 업로드", "DENY", adminRole, `completion_photos/${OTHER}/e1_1.jpg`, "create"],
+  // 읽기는 완료 팝업에서 누구나 확인할 수 있어야 한다(자기 센터 한정).
+  ["[완료사진] 직원(role=user): 자기 센터 조회", "ALLOW", workerRole, `completion_photos/${CENTER}/e1_1.jpg`, "get"],
+  ["[완료사진] 직원(role=user): 남의 센터 조회", "DENY", workerRole, `completion_photos/${OTHER}/e1_1.jpg`, "get"],
+  ["[완료사진] 미인증: 조회", "DENY", null, `completion_photos/${CENTER}/e1_1.jpg`, "get"],
+
   // ── 서버 전용 산출물: 서명 URL로만 배포(서명 URL은 규칙을 우회하므로 영향 없음) ──
   ["직원: 이벤트 보고서 직접 조회", "DENY", worker, `report/${CENTER}/a.xlsx`, "get"],
   ["직원: 엑셀 통합본 직접 조회", "DENY", worker, `excel_merge/${CENTER}/a.xlsx`, "get"],

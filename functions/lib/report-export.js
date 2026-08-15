@@ -116,24 +116,28 @@ function guessImageExtension(url) {
   return ext === "jpg" ? "jpeg" : ext;
 }
 
+// 다운로드 URL 목록 → 이미지 버퍼. 일부가 실패해도 나머지는 살린다.
+async function fetchPhotoBuffers(urls, limit, label) {
+  const out = [];
+  for (const url of urls.slice(0, limit)) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      out.push({ buffer: Buffer.from(await res.arrayBuffer()), extension: guessImageExtension(url) });
+    } catch (e) {
+      console.warn(`[이벤트 보고서] ${label} 다운로드 실패(URL):`, url, e.message);
+    }
+  }
+  return out;
+}
+
 // events-tab.js의 loadEventPhotos와 동일한 2단계 해석 로직을 서버에서 재현:
 //   ① photos 필드(콤마구분 다운로드 URL)가 있으면 그대로 fetch
 //   ② 없으면 photo_count만큼 Storage 경로 패턴으로 직접 download (Admin SDK라 토큰 불필요)
 async function resolvePhotoBuffers(ev) {
-  const out = [];
   const urls = String(ev.photos || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (urls.length > 0) {
-    for (const url of urls.slice(0, 3)) {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        out.push({ buffer: Buffer.from(await res.arrayBuffer()), extension: guessImageExtension(url) });
-      } catch (e) {
-        console.warn("[이벤트 보고서] 사진 다운로드 실패(URL):", url, e.message);
-      }
-    }
-    return out;
-  }
+  if (urls.length > 0) return fetchPhotoBuffers(urls, 3, "사진");
+  const out = [];
 
   const count = Math.min(parseInt(String(ev.photo_count ?? "0").replace(/[^0-9]/g, ""), 10) || 0, 3);
   if (count === 0) return out;
@@ -156,11 +160,23 @@ async function resolvePhotoBuffers(ev) {
   return out;
 }
 
-async function embedPhotos(workbook, ws, rowNumber, photos) {
-  for (let i = 0; i < Math.min(photos.length, 3); i++) {
+// [2026-08-14 신규] 완료 사진 — m-event 화면에서 관리자가 올릴 때 받은 다운로드 URL을
+// events.completion_photos(배열)에 저장해 둔 것을 그대로 쓴다.
+// **파일명을 추정하지 않는다**: 점검 사진은 파일명 규칙을 여러 곳에서 각자 추정하다
+// 서로 어긋난 이력이 있어서(system_map.md 4번), 새 경로는 URL을 문서에 남기는 방식으로 갔다.
+// 그래서 여기엔 위 resolvePhotoBuffers의 ② 같은 Storage 경로 폴백이 없다 — 없는 게 맞다.
+async function resolveCompletionPhotos(ev) {
+  const urls = Array.isArray(ev.completion_photos) ? ev.completion_photos.filter(Boolean) : [];
+  if (urls.length === 0) return [];
+  return fetchPhotoBuffers(urls, 2, "완료사진"); // 완료사진 열이 J·K 두 개
+}
+
+// startCol은 0-index 열 번호 (E=4, J=9)
+async function embedPhotos(workbook, ws, rowNumber, photos, startCol) {
+  for (let i = 0; i < photos.length; i++) {
     const imageId = workbook.addImage({ buffer: photos[i].buffer, extension: photos[i].extension });
     ws.addImage(imageId, {
-      tl: { col: 4 + i, row: rowNumber - 1 }, // E=col4(0-idx), F=5, G=6
+      tl: { col: startCol + i, row: rowNumber - 1 },
       ext: { width: REPORT_PHOTO_SIZE_PX, height: REPORT_PHOTO_SIZE_PX },
       editAs: "oneCell",
     });
@@ -257,8 +273,13 @@ async function buildReportWorkbook({ center, start, end, events }) {
 
     // 행 높이는 템플릿 값을 그대로 둔다 (위 "행 높이" 주석 참고 — 의도된 무동작)
 
-    const photos = await resolvePhotoBuffers(ev);
-    await embedPhotos(wb, ws, row, photos);
+    // 점검 사진 → E·F·G, 완료 사진 → J·K (0-index라 4, 9)
+    const [photos, donePhotos] = await Promise.all([
+      resolvePhotoBuffers(ev),
+      resolveCompletionPhotos(ev),
+    ]);
+    await embedPhotos(wb, ws, row, photos.slice(0, 3), 4);
+    await embedPhotos(wb, ws, row, donePhotos, 9);
   }
 
   // [2026-07-23 버그 수정] ExcelJS spliceRows()가 요청한 만큼 행을 실제로 지우지 못하는

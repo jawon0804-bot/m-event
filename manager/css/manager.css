@@ -381,6 +381,20 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .btn-done:hover { background: #15803d; }
 .completed-msg { text-align: center; padding: 16px; color: var(--green); font-weight: 600; }
 
+/* ── 완료 사진 (보고서 J·K열로 나가는 증빙) ── */
+.done-photo-hint    { font-weight: 400; color: var(--gray3); margin-left: 4px; }
+.done-photo-actions { padding-bottom: 16px; }
+.btn-photo {
+  background: #fff; color: var(--navy); border: 1px solid var(--gray2);
+  padding: 8px 14px; font-size: 13px;
+}
+.btn-photo:hover:not(:disabled) { background: var(--gray0); }
+.btn-photo:disabled { color: var(--gray3); cursor: default; }
+.done-photo-msg { font-size: 12px; color: var(--gray4); margin-top: 8px; }
+.done-photo-msg.error { color: var(--red); }
+/* 첨부 대기 중(아직 업로드 전) 썸네일은 점선 테두리로 구분 */
+.photo-thumb.pending { border: 2px dashed var(--navy2); opacity: .75; }
+
 /* ── 페이지네이션 ── */
 .pagination { display: flex; justify-content: center; gap: 6px; padding: 16px; flex-wrap: wrap; }
 .page-btn { min-width: 34px; height: 34px; border: 1px solid var(--gray2); border-radius: 6px; background: #fff; color: var(--navy); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
