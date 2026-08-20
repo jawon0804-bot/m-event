@@ -122,7 +122,7 @@ UserDB에서 이름이 일치하는 사람을 최대 50명까지 조회 (`LOGIN_
 | 이벤트 탭 | 발생한 이슈 목록 (실시간 갱신), 진행중/완료 구분, 상태 변경 | 모든 사용자 |
 | 엑셀 탭 | 생성된 엑셀 점검 보고서 다운로드 (개별 / 여러 개를 시트별로 합친 **파일 병합**) — 아래 "🧩 엑셀 파일 병합" 섹션 참고 | 모든 사용자 |
 | 사진 탭 | 점검 시 첨부된 사진 모아보기 | 모든 사용자 |
-| 보고서 탭 | 서브탭 2개: **이벤트**(기간 내 이벤트를 엑셀로 매핑·다운로드) / **점검표**(월별 daily/weekly/monthly 생성 현황 집계) — 아래 "📊 이벤트 보고서", "📈 점검표 현황" 섹션 참고 | 🔒 관리자만 |
+| 보고서 탭 | 서브탭 2개: **이벤트**(기간 내 이벤트를 엑셀로 매핑·다운로드) / **점검표**(월별 daily/weekly/monthly 생성 현황 집계 + 점검표를 누르면 설비별 점검 완료·미완료) — 아래 "📊 이벤트 보고서", "📈 점검표 현황" 섹션 참고 | 🔒 관리자만 |
 
 ### 🔒 보고서 탭이 보이는 조건
 ```js
@@ -457,37 +457,62 @@ M-Engine은 openpyxl로 파일을 만드는데, openpyxl은 그림(drawing) XML�
 
 ---
 
-## 📈 점검표 현황 (2026-07-25 추가, 2026-07-26 재설계) — 보고서 탭의 "점검표" 서브탭
+## 📈 점검표 현황 (2026-07-25 추가, 2026-07-26 재설계, 2026-08-20 설비 단위 확장) — 보고서 탭의 "점검표" 서브탭
 
 > M-Engine이 자동/수동으로 생성한 점검표(`Maxerve_Excel` 컬렉션)를 센터+월 단위로 "기대 횟수 대비 실제 횟수"로 집계해서 보여주는 화면. M-Engine의 월간 요약 메일(`/monthly_report`, M-Engine 레포 README "2026-07-26" 항목 참고)과 **완전히 동일한 계산 결과**를 화면에서도 바로 보여주는 게 목표. 서버(Functions/Cloud Function) 없이 클라이언트에서 Firestore를 직접 읽어서 그 자리에서 집계함.
 
 ### 무엇을 하나요?
 - 센터 + 월(`YYYY-MM`)을 고르고 **[조회]**를 누르면, `center_configs/{center}/inspections`(그 센터에 등록된 점검표 전체 목록)을 기준으로 각 점검표의 "기대 횟수"를 계산하고, `Maxerve_Excel`에서 `facility_id`가 일치하는 문서 수를 세서 "실제 횟수"를 매칭함.
-- 표 컬럼: 구분(daily/weekly/monthly) · 설비명(sheet_label) · 기대 · 실제 · 상태(정상/⚠️ 부족)
+- 표 컬럼: 구분(daily/weekly/monthly) · 설비명(sheet_label) · 기대 · 실제 · 상태(정상/⚠️ 부족/미매핑/진행중)
 - **실제 생성 건수가 0건인 점검표도 목록에 그대로 나오고 "부족"으로 표시됨** — 월간 요약 메일과 동일하게, "아예 안 만들어진 것"과 "일부만 만들어진 것"을 구분 안 하고 전부 보여줌.
+- 🆕 **점검표 행을 누르면 설비(fid)별로 펼쳐짐** — 아래 "2026-08-20 설비 단위 확장" 참고.
+
+### 🔍 2026-08-20 설비 단위 확장: 매핑되기 전 상태를 본다
+- **문제**: 이 화면의 "실제"는 `Maxerve_Excel`(엑셀이 만들어진 횟수)만 세기 때문에, **매핑이 안 된 점검표는 "0건 부족"까지만 보이고 왜 안 됐는지를 알 수 없었어요.** M-Engine은 점검표의 `fids` 중 **하나라도** 로그가 없으면 엑셀을 아예 안 만들거든요(`M-Engine/lib/excel_engine.py`의 `점검 누락: N개 미완료 (M/K개 완료)` 분기). 그 "M/K개" 정보는 Cloud Run 로그로만 나가고 Firestore엔 안 남는 데다, 2026-07-26에 누락 메일까지 없애서 확인할 방법이 아예 없었어요.
+- **바뀐 점**: `inspection_logs`를 같이 읽어서, 점검표 행을 누르면 **설비 하나하나가 자식 행으로 펼쳐지고** 각 설비의 점검 완료 횟수가 같은 `기대 / 실제` 열에 그대로 표시돼요. 컬럼은 안 늘렸어요.
+  ```
+  monthly  ▾ 수변전설비  설비 3        1    0   ⚠️ 부족
+               전기_03 (수변전설비_특고압부)   1    1   정상
+               전기_04 (수변전설비_저압부)     1    0   ⚠️ 부족   ← 이 둘 때문에 엑셀이 안 만들어진 것
+               전기_05 (수변전설비_발전설비)   1    0   ⚠️ 부족
+  ```
+- ⚠️ **점검표 행의 "실제"와 설비 행의 "실제"는 축이 달라요** — 점검표 행은 **엑셀 생성 횟수**, 설비 행은 **현장 점검 횟수**라서 **자식 합계가 부모와 같지 않은 게 정상**이에요. 오히려 그 어긋남이 보고 싶은 정보예요: 설비가 전부 완료인데 점검표 실제가 0이면 "점검은 다 됐는데 매핑이 안 된 것"이고, 그 경우 상태가 주황색 **`미매핑`**으로 떠요. (표 위 범례에도 같은 설명을 적어놨어요)
+- **아직 안 끝난 회차는 기대에서 빼요.** 이번 달을 조회하면 남은 날짜까지 전부 미달로 잡혀 화면이 통째로 빨개지거든요. 기대 옆의 `+n`이 "아직 안 끝난 회차 n건"이고, 실제 옆의 `+n`은 "그 진행 중인 회차에서 이미 끝낸 점검"이에요(`19 +12 / 2 +1`처럼 대칭으로 읽으면 돼요). 도래한 회차가 0이면 상태는 회색 **`진행중`**.
+  - 이 판정은 M-Engine 스케줄과 같은 기준이에요 — daily는 다음날 06:30에 어제치를 만들고, monthly는 말일이 지나야 그 달이 닫혀요.
+  - 완료 집계에서까지 빼면 **이번 달에 이미 끝낸 점검이 0으로 보이는** 문제가 생겨서(실제로 8월 승강기가 그랬어요), 분모(기대)만 자르고 분자는 따로 세요.
+- **회차 구간은 M-Engine과 같은 규칙**이에요(`buildInspPeriods()`): daily는 **06:00 ~ 익일 06:00**(`lib/config.py`의 `BUSINESS_DAY_START_HOUR`), weekly는 그 달 월요일마다 "지난주 월~일", monthly는 1일~말일. `inspection_logs.datetime`이 KST 문자열이라 **문자열 그대로 비교**해서 타임존 변환을 아예 안 거쳐요.
+- **V8(전기 일지)은 시간대까지 봐요.** 설비마다 `time_rows`의 시간대(10:00/15:00/20:00/24:00)가 **전부** 있어야 그 회차가 완료예요(`M-Engine/processor.py`의 `select_v8_daily_data`와 같은 규칙). 하나라도 빠지면 로그가 있어도 미완료라, 그냥 0으로만 보이면 "점검을 아예 안 했다"로 오해해요. 그래서 그런 회차는 노란색 **`△부분 n`**으로 따로 표시해요.
+- **`type`이 `inspection`이 아닌 로그는 버려요** — 특이사항 메모(`type='memo'`)가 같은 컬렉션에 섞여 있어요(한 센터 7월 로그 151건 중 49건이 메모였어요). M-Engine도 같은 필터를 걸어요(`lib/firestore_data.py`).
+- **비용/인덱스**: 한 센터 한 달 로그가 100~200건 수준이라 클라이언트 집계로 충분해요. 조건(`center_name` 동등 + `datetime` 범위)은 이미 있는 복합 색인 `inspection_logs (center_name ASC, datetime ASC)`가 그대로 처리해서 **색인 추가가 필요 없어요**(사진 탭이 같은 패턴으로 90일치를 읽고 있어요).
 
 ### 🔄 2026-07-26 재설계: 왜 바꿨나
 - **처음 버전(2026-07-25)**: `Maxerve_Excel`만 스캔해서 그 안에 있는 `schedule_type`/`sheet_label` 필드로 그룹핑했음. 이 방식의 문제 두 가지가 실사용 중 발견됨:
   1. 특정 달에 **실제 생성된 문서가 하나도 없으면** 표 자체가 통째로 비어서, "몇 건이 부족한지"를 전혀 알 수 없었음(월간 요약 메일은 매번 정상적으로 "부족 14건"처럼 보여주는데 화면은 그냥 텅 빔 — 사용자가 이 불일치를 직접 발견함).
   2. `schedule_type`/`sheet_label` 필드가 **2026-07-25 이후 생성 문서에만 있어서**, 그 이전 문서는 집계에서 통째로 제외됐음.
 - **바뀐 방식**: `Maxerve_Excel`만 보는 대신 `center_configs/{center}/inspections`(점검표 설정 전체)를 먼저 읽어서 "이 센터엔 원래 이런 점검표들이 있다"는 전체 목록을 만들고, 각 점검표의 `facility_id`로 `Maxerve_Excel`을 매칭해 실제 개수를 셈. `facility_id`는 2026-07-25 이전 문서에도 항상 있던 필드라서, **옛날 문서도 자동으로 집계에 포함**되고(백필 불필요), 실제 문서가 0건이어도 점검표 자체는 목록에 나오니 월간 메일과 정확히 같은 결과가 나옴.
-- `calcExpectedCount()`(`manager/js/report-tab.js`)는 M-Engine `lib/scheduler.py`의 `calc_expected_count()`와 동일한 로직(daily=그 달 일수, monthly=1, weekly=그 달 월요일 수)을 JS로 재구현한 것 — 계산 로직 자체가 단순해서 두 언어에 따로 구현해도 어긋날 위험은 낮다고 보고 이렇게 감(M-Engine에 API를 새로 만들어 호출하는 대신).
+- 기대 횟수는 M-Engine `lib/scheduler.py`의 `calc_expected_count()`(daily=그 달 일수, monthly=1, weekly=그 달 월요일 수)를 JS로 재구현한 것 — 계산 로직 자체가 단순해서 두 언어에 따로 구현해도 어긋날 위험은 낮다고 보고 이렇게 감(M-Engine에 API를 새로 만들어 호출하는 대신). **2026-08-20부터는 `calcExpectedCount()`가 아니라 `buildInspPeriods()`가 그 역할을 해요** — 설비 단위 집계를 하려면 "몇 번"이 아니라 "각 회차가 언제부터 언제까지인지"가 필요해서 회차 목록을 반환하도록 바꿨고, **그 목록의 길이가 곧 예전 `calcExpectedCount()`의 반환값**이에요(두 값이 어긋나면 둘 중 하나가 틀린 것).
+  - ⚠️ 이걸로 **판정 로직이 JS/Python 두 벌**이 됐어요(회차 구간, 06:00 경계, V8 시간대 규칙). 경계나 규칙을 바꿀 땐 M-Engine(`lib/config.py`, `lib/scheduler.py`, `processor.py`)과 이 파일을 **반드시 같이** 고쳐야 해요.
 - 🆕 **센터명 라벨 추가**: 근무일지 탭의 `wl-center-label`과 동일한 패턴으로, 서브탭(이벤트/점검표) 앞에 로그인한 센터명을 보여주는 라벨(`report-center-label`)을 추가했어요. Master는 "📊 전체 센터", 그 외에는 "📊 {센터명}"으로 표시(`buildCenterFilters()`에서 설정).
 
 ### 데이터 출처
-- `center_configs/{center}/inspections`: 점검표 목록(schedule_type, sheet_label, fids, active) — "기대 횟수" 계산 기준
-- `Maxerve_Excel`: `center_name` + `datetime` 범위로 조회 후 `facility_id`별로 개수 집계 — "실제 횟수"
+- `center_configs/{center}/inspections`: 점검표 목록(schedule_type, sheet_label, fids, active, 🆕 engine_type, time_rows) — "기대 횟수"와 설비 목록의 기준
+- `Maxerve_Excel`: `center_name` + `datetime` 범위로 조회 후 `facility_id`별로 개수 집계 — 점검표 행의 "실제 횟수"
+- 🆕 `inspection_logs`: `center_name` + `datetime` 범위로 조회 — 설비 행의 "실제(점검 완료) 횟수". 조회 구간이 그 달보다 앞뒤로 넓어요(앞 7일: weekly 회차가 "지난주 월~일"이라서 / 뒤 06:00: daily 말일 회차가 익월 1일 06:00에 끝나서)
+- 🆕 `center_configs/{center}/facilities`의 `fid_name`: 설비 행에 보여줄 이름. `auth.js`의 `loadFidLocations()`가 채우는 전역 `fidLocations`를 그대로 씀 (Master가 센터를 바꾸면 사진 탭처럼 다시 로드)
 - `schedule_type`/`sheet_label` 필드(M-Engine이 2026-07-25부터 `Maxerve_Excel`에 같이 저장)는 **이 화면에서는 더 이상 안 씀** — `facility_id` 매칭만으로 충분해서 예전 문서 호환을 위해 남겨둔 셈. (m-event 자체 다른 화면에서 쓸 수도 있으니 필드 자체는 계속 유지)
 
 ### 관련 파일
 | 파일 | 역할 |
 |---|---|
-| `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더), `calcExpectedCount()`(기대 횟수 계산) |
+| `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더), `buildInspPeriods()`(회차 구간 계산), `toggleInspDetail()`(설비 행 펼치기), `inspNowKst()`/`inspFirstResult()`(보조) |
+| `manager/css/manager.css` | `.insp-row-parent`/`.insp-row-child`(펼치기), `.insp-badge`/`.insp-partial`/`.insp-remain`(상태·△부분·+n 표시) |
 | `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트 및 `report-center-label` 채움 |
 
 ### 트러블슈팅 메모
 - 조회했는데 "이 센터에 등록된 점검표가 없습니다"가 나오면 → `center_configs/{center}/inspections` 자체가 비어있는 것(설정 문제, Firestore 콘솔에서 확인)
 - 전부 "부족"으로만 나와도 정상일 수 있음 — 그 달에 실제로 자동 생성이 안 됐으면(예: 스케줄러 버그가 있었던 달) 월간 메일과 동일하게 전부 부족으로 나오는 게 맞는 결과임
+- 🆕 **`미매핑`(주황)이 뜨면** 설비는 전부 점검됐는데 엑셀만 안 만들어진 것 → 현장 문제가 아니라 M-Engine 쪽(스케줄 누락, 생성 실패)이나 아래 `fids` 불일치를 봐야 함
+- 🆕 **설비 행은 전부 정상인데 점검표 행만 계속 0인 경우**, `inspections`의 `fids`가 바뀐 뒤일 수 있음 — 점검표 행의 "실제"는 `Maxerve_Excel.facility_id`(생성 시점의 fids를 콤마로 이은 문자열)와 **현재 fids 문자열이 정확히 같아야** 매칭돼서, 설비를 하나 빼거나 추가하면 **과거 생성분이 통째로 0으로 잡힘**(실제 사례: 집수정펌프가 `기계_41~47`로 생성됐는데 설정이 `기계_41~45`로 바뀜). M-Engine의 월간 요약 메일(`lib/scheduler.py`의 `_collect_center_monthly_rows`)도 **같은 방식으로 매칭**하므로 같은 증상이 메일에도 나타남 — 고치려면 양쪽을 같이 고쳐야 해서 2026-08-20 시점엔 그대로 둠
 - `center_name` + `datetime` 범위 쿼리라 Firestore 복합 색인이 필요할 수 있어요 — 엑셀 탭이 쓰는 것과 같은 컬렉션/필드 패턴이라 이미 색인이 있을 가능성이 높지만, 처음 실행 시 에러가 나면 에러 메시지의 색인 생성 링크를 따라가면 돼요
 
 ---

@@ -535,10 +535,39 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .insp-report-table th, .insp-report-table td {
   padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--gray1);
 }
-.insp-report-table th { color: var(--gray4); font-size: 12px; font-weight: 700; }
+.insp-report-table th { color: var(--gray4); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .insp-report-table td:nth-child(3), .insp-report-table th:nth-child(3),
 .insp-report-table td:nth-child(4), .insp-report-table th:nth-child(4) { text-align: right; }
 .insp-report-table td:last-child, .insp-report-table th:last-child { text-align: center; }
+
+/* 점검표 행(부모) → 설비 행(자식) 펼치기. 자식은 기본 숨김이고 .show가 붙어야 보인다
+   (tr에 hidden 속성을 쓰면 다른 display 규칙에 덮일 수 있어 클래스로 토글한다) */
+.insp-report-legend {
+  font-size: 12px; color: var(--gray4); line-height: 1.7;
+  margin: 0 0 10px; padding: 9px 11px; background: var(--gray0); border-radius: 6px;
+}
+.insp-report-legend b { color: var(--gray4); }
+.insp-row-parent { cursor: pointer; }
+.insp-row-parent:hover { background: #f8fafc; }
+.insp-row-parent td { font-weight: 600; }
+.insp-caret { display: inline-block; width: 14px; color: var(--gray3); }
+.insp-fid-count {
+  margin-left: 7px; font-size: 11px; font-weight: 600; color: var(--gray3);
+  background: var(--gray1); border-radius: 10px; padding: 1px 7px; white-space: nowrap;
+}
+.insp-row-child { display: none; background: #fcfdfe; }
+.insp-row-child.show { display: table-row; }
+.insp-row-child td { font-size: 12.5px; color: var(--gray4); }
+.insp-fid-cell { padding-left: 34px !important; }
+.insp-fid-name { margin-left: 5px; color: var(--gray3); }
+.insp-badge {
+  padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.insp-remain { margin-left: 4px; font-size: 11px; font-weight: 600; color: var(--gray3); }
+.insp-partial {
+  margin-left: 6px; padding: 2px 7px; border-radius: 10px; white-space: nowrap;
+  font-size: 11px; font-weight: 700; background: #fef9c3; color: #a16207;
+}
 
 @media (max-width: 600px) {
   .event-meta { min-width: unset; }
