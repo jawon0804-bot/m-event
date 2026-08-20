@@ -519,7 +519,11 @@ M-Engine은 openpyxl로 파일을 만드는데, openpyxl은 그림(drawing) XML�
 | `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더), `buildInspPeriods()`(회차 구간 계산), `toggleInspDetail()`(설비 행 펼치기), `inspNowKst()`/`inspFirstResult()`(보조) |
 | `manager/css/manager.css` | `.insp-row-parent`/`.insp-row-child`(펼치기), `.insp-badge`/`.insp-partial`(상태·△부분), `.insp-report-scroll`(좁은 화면에서 표만 가로 스크롤 — 페이지는 안 밀림), `#report-subpage-inspection .report-wrap`(이 서브탭만 1000px) |
 
-> 📌 **폭 주의**: `.report-wrap`의 기본값은 600px인데, 그건 이벤트 서브탭(필터·파일 목록) 기준이에요. 점검표는 열이 7개라 600px에서는 데스크톱에서도 표가 가로로 잘려요 — 그래서 이 서브탭만 1000px로 풀어놨어요(데스크톱 1265px에서 표 896px, 스크롤 없음 / 모바일 375px에서는 표만 스크롤). 열을 더 늘릴 거면 이 폭도 같이 봐야 해요.
+> 📌 **폭 설계** (2026-08-20에 여러 번 헤맨 부분이라 적어둬요):
+> - `.report-wrap`은 **두 서브탭 공용 750px**이에요(예전엔 600px). 서브탭마다 폭이 다르면 탭을 옮길 때 박스 크기가 튀어서 통일했어요.
+> - 표는 **`table-layout: fixed`로 숫자·상태 열 폭을 고정**하고, **남는 공간은 설비명 열만** 가져가요. 예전엔 `width:100%` 자동 레이아웃이라 남는 공간이 7개 열에 골고루 퍼져서, **넓히면 숫자 열까지 허옇게 벌어지고 좁히면 다 같이 쪼그라들었어요.** 폭 숫자만 바꿔서는 절대 안 잡히던 문제예요.
+> - 열을 더 늘릴 거면 고정폭 합계(현재 424px)와 `.insp-report-table`의 `min-width`(560px)를 같이 봐야 해요.
+> - 가로 스크롤은 **모바일에서만** 동작해요. 데스크톱에서 스크롤바가 보이면 폭 설정이 어긋난 거예요 — 한때 `min-width: 620px`를 카드 안쪽(496px)보다 크게 잡아서 상시 스크롤바가 떴던 적이 있어요.
 | `tests/expected-count.test.js` | 회차 수·구간을 M-Engine과 같은 케이스 표로 고정 (CI에서 배포 전 실행) |
 | `tests/func-key.test.js` | `Maxerve_Excel` 문서 → 점검표(func_key) 판정을 M-Engine과 같은 표로 고정 (CI에서 배포 전 실행) |
 | `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트 및 `report-center-label` 채움 |

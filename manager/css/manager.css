@@ -473,14 +473,16 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 /* ══════════════════════════════════
    보고서 페이지
 ══════════════════════════════════ */
+/* [2026-08-20] 600 → 750px. 점검표 서브탭 표가 열 7개라 600px에서는 설비명이 계속
+   접혔다. 서브탭마다 폭이 다르면 탭을 옮길 때마다 박스 크기가 튀어서 두 서브탭을
+   같은 폭으로 맞췄다(이벤트 서브탭도 같이 넓어진다). */
 .report-wrap {
-  max-width: 600px; margin: 40px auto; padding: 0 24px;
+  max-width: 750px; margin: 40px auto; padding: 0 24px;
 }
 /* 점검표 서브탭만 넓게. 이벤트 서브탭은 필터·파일 목록이라 600px가 맞지만,
    점검표는 열이 7개(구분·설비명·설비ID·매핑·점검·최근 점검·상태)라 600px에서는
    표가 가로 스크롤로 잘린다. 좁은 화면에서는 어차피 아래 폭이 줄어들고,
    그때만 .insp-report-scroll의 가로 스크롤이 동작한다. */
-#report-subpage-inspection .report-wrap { max-width: 1000px; }
 .report-card {
   background: #fff; border-radius: 12px; padding: 28px;
   box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 20px;
@@ -538,9 +540,24 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 
 /* 열이 6개라 좁은 화면에서는 넘친다 — 페이지 전체가 밀리지 않게 표만 가로 스크롤 */
 .insp-report-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.insp-report-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13.5px; }
+/* [폭 설계] 열 폭을 고정하고 남는 공간은 **설비명만** 가져가게 한다.
+   예전엔 width:100% + 자동 레이아웃이라 남는 공간이 7개 열에 골고루 배분됐다.
+   그래서 카드를 넓히면 숫자 열까지 허옇게 벌어지고(1000px), 좁히면 다 같이
+   쪼그라들어 설비명이 3줄로 접혔다(600px). 이제 카드를 넓히면 그 공간은 전부
+   설비명 몫이라 이름이 한 줄에 들어가고, 숫자·상태는 항상 붙어 있다. */
+.insp-report-table { width: 100%; min-width: 560px; table-layout: fixed; border-collapse: collapse; font-size: 13.5px; }
+.insp-report-table th:nth-child(1) { width: 68px; }   /* 구분 */
+.insp-report-table th:nth-child(3) { width: 54px; }   /* 설비ID */
+.insp-report-table th:nth-child(4) { width: 46px; }   /* 매핑 */
+.insp-report-table th:nth-child(5) { width: 46px; }   /* 점검 */
+.insp-report-table th:nth-child(6) { width: 124px; }  /* 최근 점검 — 날짜+점검자가 한 줄에 들어가는 폭 */
+.insp-report-table th:nth-child(7) { width: 86px; }   /* 상태 */
+/* 2열(설비명)은 폭을 안 준다 = 나머지를 전부 가져간다. 긴 이름은 두 줄로 접힌다. */
+.insp-report-table td:nth-child(2) { overflow-wrap: anywhere; }
+/* 폭이 600px(이벤트 서브탭과 같은 공용 폭)이라 열 7개가 빠듯하다 — 좌우 여백을 줄여
+   가로 스크롤 없이 들어가게 한다. 긴 설비명은 두 줄로 접히는 쪽을 택했다. */
 .insp-report-table th, .insp-report-table td {
-  padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--gray1);
+  padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--gray1);
 }
 .insp-report-table th { color: var(--gray4); font-size: 12px; font-weight: 700; white-space: nowrap; }
 /* 설비·매핑·점검(3~5열)은 숫자라 오른쪽 정렬 */
@@ -548,8 +565,8 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .insp-report-table td:nth-child(4), .insp-report-table th:nth-child(4),
 .insp-report-table td:nth-child(5), .insp-report-table th:nth-child(5) { text-align: right; }
 /* 최근 점검(6열)은 날짜라 왼쪽 정렬 + 좁은 화면에서 줄바꿈 안 되게 */
-.insp-report-table td:nth-child(6), .insp-report-table th:nth-child(6) { text-align: left; white-space: nowrap; padding-left: 18px; }
-.insp-last { font-size: 12px; color: var(--gray4); }
+.insp-report-table td:nth-child(6), .insp-report-table th:nth-child(6) { text-align: left; padding-left: 8px; }
+.insp-last { font-size: 12px; color: var(--gray4); white-space: nowrap; }
 .insp-report-table td:last-child, .insp-report-table th:last-child { text-align: center; }
 
 /* 점검표 행(부모) → 설비 행(자식) 펼치기. 자식은 기본 숨김이고 .show가 붙어야 보인다
