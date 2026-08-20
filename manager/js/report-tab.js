@@ -147,14 +147,30 @@ function setInspReportMsg(text, type) {
   el.className = "report-status-msg" + (type ? ` ${type}` : "");
 }
 
-function inspBadge(kind) {
+// 상태 뱃지. 점검표 행과 설비 행은 **축이 다르다** —
+//   점검표 행(매핑 축) : 엑셀이 만들어졌는가. 월말에 만들어지므로 그전엔 "진행중"이 맞다.
+//   설비 행(점검 축)   : 현장에서 점검했는가. **기간이 안 끝났어도 했으면 "완료"다.**
+// 이 둘을 하나로 섞어놨다가 "8/13에 점검을 끝낸 저수조설비가 진행중으로 보이는" 문제가 있었다.
+function inspBadge(kind, title) {
   const [bg, color, text] = {
+    // 점검표 행
     ok:       ["#dcfce7", "#15803d", "정상"],
     short:    ["#fee2e2", "#dc2626", "⚠️ 부족"],
     unmapped: ["#ffedd5", "#c2410c", "미매핑"],
     pending:  ["#f1f5f9", "#475569", "진행중"],
+    // 설비 행
+    done:     ["#dcfce7", "#15803d", "완료"],
+    missing:  ["#fee2e2", "#dc2626", "⚠️ 미완료"],
+    waiting:  ["#f1f5f9", "#475569", "대기"],
   }[kind];
-  return `<span class="insp-badge" style="background:${bg};color:${color}">${text}</span>`;
+  const tip = title ? ` title="${title}"` : "";
+  return `<span class="insp-badge" style="background:${bg};color:${color}"${tip}>${text}</span>`;
+}
+
+// "2026-08-15 14:50" → "08-15 14:50" (연도는 조회한 달로 이미 정해져 있어 군더더기)
+function inspShortDt(dt) {
+  const s = String(dt || "");
+  return s.length >= 16 ? s.slice(5, 16) : s;
 }
 
 // 점검표 행 클릭 → 설비 행 펼치기/접기
@@ -236,14 +252,16 @@ async function loadInspectionReport() {
     const logsByFid = {};
     logSnap.forEach(doc => {
       const d = doc.data();
-      // 특이사항 메모(type='memo')는 점검이 아니다. M-Engine도 type != 'inspection'을 버린다
-      // (lib/firestore_data.py) — 한 센터 7월 로그 151건 중 49건이 메모였다.
+      // 특이사항 메모는 점검이 아니다. M-Engine도 type != 'inspection'을 버린다
+      // (lib/firestore_data.py). 실제 값은 'memo'가 아니라 'memo_only'이고 양이 적지 않다 —
+      // 한 센터 7월 로그 151건 중 49건, 8월 47건 중 31건이 메모였다.
       if ((d.type || "inspection") !== "inspection") return;
       const fid = String(d.facility_id || "").trim();
       if (!fid) return;
       (logsByFid[fid] = logsByFid[fid] || []).push({
         dt: String(d.datetime || ""),
         t:  inspFirstResult(d.results),
+        w:  String(d.worker || ""),
       });
     });
 
@@ -285,33 +303,51 @@ async function loadInspectionReport() {
       const needLabels = isV8 ? Object.keys(insp.time_rows || {}) : [];
 
       // 한 회차가 그 설비에 대해 완료됐는지 — 완료면 true, 로그는 있는데 V8 시간대가
-      // 모자라면 "partial", 로그가 아예 없으면 false.
+      // 모자라면 "partial", 로그가 아예 없으면 false. 두 번째 값은 그 회차의 마지막 점검 기록.
       const slotState = (logs, p) => {
         const hits = logs.filter(l => l.dt >= p.start && l.dt < p.end);
-        if (hits.length === 0) return false;
+        if (hits.length === 0) return [false, null];
+        const last = hits.reduce((a, b) => (a.dt >= b.dt ? a : b));
         if (isV8 && needLabels.length) {
           const have = new Set(hits.map(h => h.t));
-          if (!needLabels.every(n => have.has(n))) return "partial";
+          if (!needLabels.every(n => have.has(n))) return ["partial", last];
         }
-        return true;
+        return [true, last];
       };
 
       const fidRows = fids.map(fid => {
         const logs = logsByFid[fid] || [];
-        let done = 0, partial = 0, donePending = 0;
+        let done = 0, partial = 0, donePending = 0, last = null;
+        const see = (hit) => { if (hit && (!last || hit.dt > last.dt)) last = hit; };
         periods.forEach(p => {
-          const st = slotState(logs, p);
+          const [st, hit] = slotState(logs, p);
+          see(hit);
           if (st === true) done++;
           else if (st === "partial") partial++;   // 도래한 회차만 △로 경고한다
         });
-        pending.forEach(p => { if (slotState(logs, p) === true) donePending++; });
-        return { fid, name: fidLocations[fid] || "", done, partial, donePending };
+        // 아직 안 끝난 회차(이번 달 monthly 등)에서 한 점검도 **완료로 센다.**
+        // 이 화면의 목적이 "이 설비 점검했나 안 했나"라서, 기간이 안 끝났다는 이유로
+        // 이미 한 점검을 빼면 화면이 0으로 보인다(8월 승강기·저수조가 실제로 그랬다).
+        pending.forEach(p => {
+          const [st, hit] = slotState(logs, p);
+          see(hit);
+          if (st === true) donePending++;
+        });
+        return { fid, name: fidLocations[fid] || "", done, partial, donePending, last };
       });
 
       const doneSlots = fidRows.reduce((s, r) => s + r.done, 0);
+      // 점검표 행의 "점검"은 **설비 × 회차 칸(슬롯)** 기준이다. 자식 행의 분자/분모를
+      // 그대로 더한 값이라 펼쳤을 때 앞뒤가 맞는다 — 예전엔 점검표 행이 매핑 건수(0)를
+      // 보여줘서 "0인데 펼치면 1개 완료"로 모순돼 보였다.
+      // monthly는 회차가 1개라 슬롯 수 = 설비 수가 되어 "설비 10개 중 2개"로 읽힌다.
+      const slotsDone  = fidRows.reduce((s, r) => s + r.done + r.donePending, 0);
+      const slotsTotal = periodsAll.length * fids.length;
+      const lastAny = fidRows.reduce((a, r) => (r.last && (!a || r.last.dt > a.dt) ? r.last : a), null);
       rows.push({
-        stype, label, fidRows, remain,
+        stype, label, fidRows, remain, slotsDone, slotsTotal, lastAny,
         expected: periods.length,
+        totalPeriods: periodsAll.length,
         count: (actualByFuncKey[funcKey] || 0) + (actualByFid[fidStr] || 0),
         allDone: periods.length > 0 && fids.length > 0 && doneSlots === periods.length * fids.length,
       });
@@ -324,48 +360,61 @@ async function loadInspectionReport() {
       return;
     }
 
-    // 기대 뒤의 +n = 아직 안 끝난 회차, 실제 뒤의 +n = 그 진행 중인 회차에서 이미 끝낸 점검.
-    // 같은 자리에 같은 모양으로 붙어서 "19+12 / 2+1"처럼 대칭으로 읽힌다.
-    const plusCell = (n, extra, title) =>
-      `${n}${extra ? `<span class="insp-remain" title="${title}">+${extra}</span>` : ""}`;
-
     const html = `
       <p class="insp-report-legend">
-        점검표 행을 누르면 설비별로 펼쳐집니다. <b>실제</b>는 점검표 행이 <b>엑셀 생성 횟수</b>,
-        설비 행이 <b>점검 완료 횟수</b>라서 서로 합이 맞지 않는 것이 정상입니다.
-        아직 안 끝난 회차는 기대에서 빼고 <span class="insp-remain">+n</span>으로 표시하며,
-        그 회차에서 이미 한 점검도 실제 옆에 <span class="insp-remain">+n</span>으로 붙습니다.
+        점검표 행을 누르면 설비별로 펼쳐집니다. <b>매핑</b>은 엑셀이 만들어진 건수,
+        <b>점검</b>은 점검한 횟수(펼친 값의 합)입니다.
+        엑셀은 보통 월말에 만들어져서 <b>점검이 끝나도 점검표 행은 한동안 진행중</b>입니다.
       </p>
+      <div class="insp-report-scroll">
       <table class="insp-report-table">
-        <thead><tr><th>구분</th><th>설비명</th><th>기대</th><th>실제</th><th>상태</th></tr></thead>
+        <thead><tr><th>구분</th><th>설비명</th><th>설비ID</th><th>매핑</th><th>점검</th><th>최근 점검</th><th>상태</th></tr></thead>
         <tbody>
           ${rows.map((r, i) => {
+            // 점검표 행의 상태 = 매핑 축(엑셀이 만들어졌는가). 숫자 두 개는 축이 다르다:
+            //   매핑 = 엑셀 몇 개 / 그 달 회차 몇 개
+            //   점검 = 완료한 칸 / 전체 칸(설비 × 회차)
             const parentKind = r.expected === 0 ? "pending"
               : r.count >= r.expected ? "ok"
               : r.allDone ? "unmapped" : "short";
+            const parentTip = parentKind === "unmapped"
+              ? "설비 점검은 전부 끝났는데 엑셀이 아직 없습니다"
+              : parentKind === "pending" ? "아직 생성 시점이 안 됐습니다(보통 월말)" : "";
             const parent = `
               <tr class="insp-row-parent" onclick="toggleInspDetail(${i})">
                 <td>${esc(r.stype)}</td>
-                <td><span class="insp-caret" id="insp-caret-${i}">▸</span>${esc(r.label)}<span class="insp-fid-count">설비 ${r.fidRows.length}</span></td>
-                <td>${plusCell(r.expected, r.remain, `아직 안 끝난 회차 ${r.remain}건은 기대에서 뺐습니다`)}</td>
-                <td>${r.count}</td>
-                <td>${inspBadge(parentKind)}</td>
+                <td><span class="insp-caret" id="insp-caret-${i}">▸</span>${esc(r.label)}</td>
+                <td>${r.fidRows.length}</td>
+                <td title="${r.stype} 회차 ${r.totalPeriods}건 중 지금까지 ${r.expected}건이 끝났습니다">${r.count}</td>
+                <td title="설비 ${r.fidRows.length}개 × 회차 ${r.totalPeriods}건 중 ${r.slotsDone}칸 완료">${r.slotsDone}</td>
+                <td class="insp-last">${r.lastAny ? esc(inspShortDt(r.lastAny.dt)) : ""}</td>
+                <td>${inspBadge(parentKind, parentTip)}</td>
               </tr>`;
             const children = r.fidRows.map(f => {
-              const kind = r.expected === 0 ? "pending" : (f.done >= r.expected ? "ok" : "short");
+              // 설비 행 = 점검 축. 기간이 안 끝났어도 **했으면 완료**다.
+              const total = f.done + f.donePending;
+              const kind = r.expected === 0
+                ? (f.donePending > 0 ? "done" : "waiting")          // 끝난 회차가 없는 달
+                : (f.done >= r.expected ? "done" : "missing");      // 끝난 회차 기준으로 판정
+              const tip = kind === "missing" && f.donePending
+                ? "끝난 회차 중 빠진 것이 있습니다(이번 회차는 이미 점검했습니다)"
+                : kind === "waiting" ? "아직 기간이 안 끝났습니다 — 늦은 것이 아닙니다" : "";
               return `
               <tr class="insp-row-child" data-parent="${i}">
                 <td></td>
                 <td class="insp-fid-cell">${esc(f.fid)}${f.name ? `<span class="insp-fid-name">(${esc(f.name)})</span>` : ""}</td>
-                <td>${plusCell(r.expected, r.remain, `아직 안 끝난 회차 ${r.remain}건은 기대에서 뺐습니다`)}</td>
-                <td>${plusCell(f.done, f.donePending, `아직 안 끝난 회차에서 이미 완료한 ${f.donePending}건`)}</td>
-                <td>${inspBadge(kind)}${f.partial ? `<span class="insp-partial" title="로그는 있지만 필요한 시간대가 다 차지 않은 회차">△부분 ${f.partial}</span>` : ""}</td>
+                <td></td>
+                <td></td>
+                <td title="${r.stype} 회차 ${r.totalPeriods}건 중 ${total}건 점검">${total}</td>
+                <td class="insp-last">${f.last ? `${esc(inspShortDt(f.last.dt))}${f.last.w ? ` <span class="insp-fid-name">${esc(f.last.w)}</span>` : ""}` : "—"}</td>
+                <td>${inspBadge(kind, tip)}${f.partial ? `<span class="insp-partial" title="로그는 있지만 필요한 시간대가 다 차지 않은 회차">△부분 ${f.partial}</span>` : ""}</td>
               </tr>`;
             }).join("");
             return parent + children;
           }).join("")}
         </tbody>
-      </table>`;
+      </table>
+      </div>`;
     card.style.display = "block";
     tableEl.innerHTML = html;
   } catch (e) {

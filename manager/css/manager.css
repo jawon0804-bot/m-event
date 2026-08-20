@@ -531,13 +531,20 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .report-file-meta { font-size: 11.5px; color: var(--gray3); margin-top: 2px; }
 .report-file-loading { text-align: center; padding: 20px; font-size: 13px; color: var(--gray3); }
 
-.insp-report-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+/* 열이 6개라 좁은 화면에서는 넘친다 — 페이지 전체가 밀리지 않게 표만 가로 스크롤 */
+.insp-report-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.insp-report-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13.5px; }
 .insp-report-table th, .insp-report-table td {
   padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--gray1);
 }
 .insp-report-table th { color: var(--gray4); font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* 설비·매핑·점검(3~5열)은 숫자라 오른쪽 정렬 */
 .insp-report-table td:nth-child(3), .insp-report-table th:nth-child(3),
-.insp-report-table td:nth-child(4), .insp-report-table th:nth-child(4) { text-align: right; }
+.insp-report-table td:nth-child(4), .insp-report-table th:nth-child(4),
+.insp-report-table td:nth-child(5), .insp-report-table th:nth-child(5) { text-align: right; }
+/* 최근 점검(6열)은 날짜라 왼쪽 정렬 + 좁은 화면에서 줄바꿈 안 되게 */
+.insp-report-table td:nth-child(6), .insp-report-table th:nth-child(6) { text-align: left; white-space: nowrap; padding-left: 18px; }
+.insp-last { font-size: 12px; color: var(--gray4); }
 .insp-report-table td:last-child, .insp-report-table th:last-child { text-align: center; }
 
 /* 점검표 행(부모) → 설비 행(자식) 펼치기. 자식은 기본 숨김이고 .show가 붙어야 보인다
@@ -717,4 +724,4 @@ table.wl-sheet td { border: 1px solid #999; padding: 2px 4px; text-align: center
 .wl-att-table tr.wl-att-title td.wl-att-today,
 .wl-att-table tr.wl-att-date td.wl-att-today,
 .wl-att-table tr.wl-att-day td.wl-att-today { background: #ec4899 !important; color: #fff; }
-.wl-att-table tr.wl-att-data td.wl-att-today  { background: #ffd9e8 !important; color: #ad1457; font-weight: 700; border-left: 2px solid #ec4899; border-right: 2px solid #ec4899; }
+.wl-att-table tr.wl-att-data td.wl-att-today  { background: #ffd9e8 !important; color: #ad1457; font-weight: 700; border-left: 2px solid #ec4899; border-right: 2px solid #ec4899; }
