@@ -483,6 +483,11 @@ M-Engine은 openpyxl로 파일을 만드는데, openpyxl은 그림(drawing) XML�
 - **회차 구간은 M-Engine과 같은 규칙**이에요(`buildInspPeriods()`): daily는 **06:00 ~ 익일 06:00**(`lib/config.py`의 `BUSINESS_DAY_START_HOUR`), weekly는 그 달 월요일마다 "지난주 월~일", monthly는 1일~말일. `inspection_logs.datetime`이 KST 문자열이라 **문자열 그대로 비교**해서 타임존 변환을 아예 안 거쳐요.
 - **V8(전기 일지)은 시간대까지 봐요.** 설비마다 `time_rows`의 시간대(10:00/15:00/20:00/24:00)가 **전부** 있어야 그 회차가 완료예요(`M-Engine/processor.py`의 `select_v8_daily_data`와 같은 규칙). 하나라도 빠지면 로그가 있어도 미완료라, 그냥 0으로만 보이면 "점검을 아예 안 했다"로 오해해요. 그래서 그런 회차는 노란색 **`△부분 n`**으로 따로 표시해요.
 - **`type`이 `inspection`이 아닌 로그는 버려요** — 특이사항 메모(`type='memo'`)가 같은 컬렉션에 섞여 있어요(한 센터 7월 로그 151건 중 49건이 메모였어요). M-Engine도 같은 필터를 걸어요(`lib/firestore_data.py`).
+- 🆕 **매칭 기준 (2026-08-20)**: 점검표 행의 "실제"는 이제 **`func_key`(inspections 문서 ID)** 로 `Maxerve_Excel` 문서를 세요.
+  - 예전엔 `facility_id`(= 생성 시점 fids를 콤마로 이은 문자열)와 **현재 fids 문자열이 정확히 같아야** 매칭됐어요. 그래서 설정에서 설비를 하나만 빼도 **그 점검표의 과거 생성분이 통째로 사라져** "0건 부족"이 됐어요(집수정펌프 실제 사례). `func_key`는 안 바뀌니까 그걸 정체성으로 써요.
+  - 옛 문서엔 `func_key` 필드가 없어서 **`storage_path`에서 되뽑아요**(`inspFuncKeyFromPath`) — 경로가 `excel/{center}/{center}_{func_key}_{YYYY-MM-DD}[M].xlsx` 형식이라 센터명으로 접두사를 떼고 마지막 밑줄(날짜) 앞까지를 func_key로 봐요. **백필 불필요**이고, 그것마저 실패하면 예전 방식으로 폴백해요.
+  - 새로 만들어지는 문서엔 M-Engine이 `func_key` 필드를 같이 저장해요(`M-Engine/lib/excel_engine.py`).
+  - ⚠️ **M-Engine의 월간 요약 메일도 같이 고쳤어요**(`lib/scheduler.py`의 `func_key_from_storage_path` / `_count_generated`). 같은 규칙이어야 화면과 메일이 안 갈려서, 양쪽 테스트가 **같은 케이스 표 14건**을 써요: `tests/func-key.test.js` ↔ `M-Engine/tests/test_func_key.py`.
 - **비용/인덱스**: 한 센터 한 달 로그가 100~200건 수준이라 클라이언트 집계로 충분해요. 조건(`center_name` 동등 + `datetime` 범위)은 이미 있는 복합 색인 `inspection_logs (center_name ASC, datetime ASC)`가 그대로 처리해서 **색인 추가가 필요 없어요**(사진 탭이 같은 패턴으로 90일치를 읽고 있어요).
 
 ### 🔄 2026-07-26 재설계: 왜 바꿨나
@@ -506,13 +511,15 @@ M-Engine은 openpyxl로 파일을 만드는데, openpyxl은 그림(drawing) XML�
 |---|---|
 | `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더), `buildInspPeriods()`(회차 구간 계산), `toggleInspDetail()`(설비 행 펼치기), `inspNowKst()`/`inspFirstResult()`(보조) |
 | `manager/css/manager.css` | `.insp-row-parent`/`.insp-row-child`(펼치기), `.insp-badge`/`.insp-partial`/`.insp-remain`(상태·△부분·+n 표시) |
+| `tests/expected-count.test.js` | 회차 수·구간을 M-Engine과 같은 케이스 표로 고정 (CI에서 배포 전 실행) |
+| `tests/func-key.test.js` | `Maxerve_Excel` 문서 → 점검표(func_key) 판정을 M-Engine과 같은 표로 고정 (CI에서 배포 전 실행) |
 | `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트 및 `report-center-label` 채움 |
 
 ### 트러블슈팅 메모
 - 조회했는데 "이 센터에 등록된 점검표가 없습니다"가 나오면 → `center_configs/{center}/inspections` 자체가 비어있는 것(설정 문제, Firestore 콘솔에서 확인)
 - 전부 "부족"으로만 나와도 정상일 수 있음 — 그 달에 실제로 자동 생성이 안 됐으면(예: 스케줄러 버그가 있었던 달) 월간 메일과 동일하게 전부 부족으로 나오는 게 맞는 결과임
 - 🆕 **`미매핑`(주황)이 뜨면** 설비는 전부 점검됐는데 엑셀만 안 만들어진 것 → 현장 문제가 아니라 M-Engine 쪽(스케줄 누락, 생성 실패)이나 아래 `fids` 불일치를 봐야 함
-- 🆕 **설비 행은 전부 정상인데 점검표 행만 계속 0인 경우**, `inspections`의 `fids`가 바뀐 뒤일 수 있음 — 점검표 행의 "실제"는 `Maxerve_Excel.facility_id`(생성 시점의 fids를 콤마로 이은 문자열)와 **현재 fids 문자열이 정확히 같아야** 매칭돼서, 설비를 하나 빼거나 추가하면 **과거 생성분이 통째로 0으로 잡힘**(실제 사례: 집수정펌프가 `기계_41~47`로 생성됐는데 설정이 `기계_41~45`로 바뀜). M-Engine의 월간 요약 메일(`lib/scheduler.py`의 `_collect_center_monthly_rows`)도 **같은 방식으로 매칭**하므로 같은 증상이 메일에도 나타남 — 고치려면 양쪽을 같이 고쳐야 해서 2026-08-20 시점엔 그대로 둠
+- ✅ **[2026-08-20 해결] 설비 행은 전부 정상인데 점검표 행만 0으로 나오던 문제** — 아래 "매칭 기준" 참고. 예전엔 `fids`를 바꾸면 과거 생성분이 통째로 0으로 잡혔음(집수정펌프가 `기계_41~47`로 생성됐는데 설정이 `기계_41~45`로 바뀐 사례)
 - `center_name` + `datetime` 범위 쿼리라 Firestore 복합 색인이 필요할 수 있어요 — 엑셀 탭이 쓰는 것과 같은 컬렉션/필드 패턴이라 이미 색인이 있을 가능성이 높지만, 처음 실행 시 에러가 나면 에러 메시지의 색인 생성 링크를 따라가면 돼요
 
 ---

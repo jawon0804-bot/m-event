@@ -110,6 +110,37 @@ function inspFirstResult(raw) {
   return String(raw ?? "").split(",")[0].trim();
 }
 
+// Maxerve_Excel의 storage_path에서 func_key를 되뽑는다.
+// 경로 형식: excel/{center}/{center}_{func_key}_{YYYY-MM-DD}[M].xlsx
+//   (뒤의 M은 수동 트리거 표시 — M-Engine lib/excel_engine.py의 output_filename)
+// center_name으로 접두사를 떼고 마지막 밑줄 뒤(날짜)를 떼는 방식이라, func_key에
+// 밑줄이 있어도(BOOSTER_PUMP) 센터명에 밑줄이 있어도 안전하다.
+// 판정 불가면 빈 문자열 — 호출부가 예전 방식(facility_id 매칭)으로 폴백한다.
+//
+// ⚠️ M-Engine lib/scheduler.py의 func_key_from_storage_path()와 **같은 규칙**이다.
+//    한쪽을 고치면 반드시 다른 쪽도 고칠 것 — 화면과 월간 메일이 갈린다.
+//    양쪽 테스트가 같은 케이스 표를 쓴다(tests/func-key.test.js ↔ tests/test_func_key.py).
+function inspFuncKeyFromPath(storagePath, centerName) {
+  const path = String(storagePath ?? "");
+  const center = String(centerName ?? "");
+  if (!path || !center) return "";
+  let name = path.split("/").pop();
+  if (name.endsWith(".xlsx")) name = name.slice(0, -".xlsx".length);
+  const prefix = center + "_";
+  if (!name.startsWith(prefix)) return "";
+  const rest = name.slice(prefix.length);
+  const cut = rest.lastIndexOf("_");
+  if (cut <= 0) return "";
+  return rest.slice(0, cut);
+}
+
+// Maxerve_Excel 문서 1건이 어느 점검표에서 나왔는지. 없으면 빈 문자열.
+function inspDocFuncKey(data) {
+  const fk = String(data.func_key ?? "").trim();
+  if (fk) return fk;
+  return inspFuncKeyFromPath(data.storage_path, data.center_name);
+}
+
 function setInspReportMsg(text, type) {
   const el = document.getElementById("report-insp-status-msg");
   el.textContent = text || "";
@@ -170,11 +201,23 @@ async function loadInspectionReport() {
       .where("datetime", "<=", month + "-31￿")
       .get();
 
-    // facility_id(합쳐진 문자열) 기준으로 실제 생성 건수 집계
-    const actualByFid = {};
+    // 생성 건수 집계. 기준은 func_key(점검표 문서 ID)다.
+    // ⚠️ [2026-08-20] 예전엔 facility_id(= fids를 콤마로 이은 문자열)로만 셌다. 그런데
+    //   그 문자열은 **생성 시점의 fids**라, 점검표 설정에서 설비를 하나 빼거나 더하면
+    //   과거 생성분이 통째로 매칭에서 빠져 "0건 부족"으로 둔갑했다(집수정펌프가
+    //   기계_41~47로 생성됐는데 설정이 기계_41~45로 바뀌어서, 파일이 멀쩡히 있는데도
+    //   0건으로 보였다). func_key는 안 바뀌므로 그걸 정체성으로 쓴다.
+    //   func_key를 못 뽑은 문서만 예전 방식으로 폴백한다.
+    const actualByFuncKey = {}, actualByFid = {};
     snap.forEach(doc => {
-      const fid = doc.data().facility_id || "";
-      actualByFid[fid] = (actualByFid[fid] || 0) + 1;
+      const data = doc.data();
+      const fk = inspDocFuncKey(data);
+      if (fk) {
+        actualByFuncKey[fk] = (actualByFuncKey[fk] || 0) + 1;
+      } else {
+        const fid = data.facility_id || "";
+        actualByFid[fid] = (actualByFid[fid] || 0) + 1;
+      }
     });
 
     // 점검 원천 데이터. 조회 구간이 그 달보다 앞뒤로 넓은 이유:
@@ -230,6 +273,9 @@ async function loadInspectionReport() {
       const fids = (Array.isArray(insp.fids) ? insp.fids : []).map(f => String(f).trim());
       const fidStr = fids.join(",");
       const label = insp.sheet_label || insp.func_key || doc.id;
+      // 점검표의 정체성은 문서 ID(=func_key)다. M-Engine도 이 ID로 config를 찾고
+      // 파일명에 쓴다(fids와 달리 안 바뀐다).
+      const funcKey = doc.id || insp.func_key || "";
 
       // V8(전기 일지)은 fid마다 time_rows의 시간대(10:00/15:00/20:00/24:00)가 **전부**
       // 있어야 그 회차가 완료다 — M-Engine processor.py의 select_v8_daily_data와 같은 규칙.
@@ -266,7 +312,7 @@ async function loadInspectionReport() {
       rows.push({
         stype, label, fidRows, remain,
         expected: periods.length,
-        count: actualByFid[fidStr] || 0,
+        count: (actualByFuncKey[funcKey] || 0) + (actualByFid[fidStr] || 0),
         allDone: periods.length > 0 && fids.length > 0 && doneSlots === periods.length * fids.length,
       });
     });

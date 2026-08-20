@@ -27,6 +27,7 @@ jobs:
         run: |
           node tests/client-ip.test.js
           node tests/expected-count.test.js
+          node tests/func-key.test.js
           node tests/permissions.test.js
           node tests/center-lock.test.js
           node tests/issue-text.test.js
