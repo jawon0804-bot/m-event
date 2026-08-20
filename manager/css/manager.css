@@ -476,6 +476,11 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .report-wrap {
   max-width: 600px; margin: 40px auto; padding: 0 24px;
 }
+/* 점검표 서브탭만 넓게. 이벤트 서브탭은 필터·파일 목록이라 600px가 맞지만,
+   점검표는 열이 7개(구분·설비명·설비ID·매핑·점검·최근 점검·상태)라 600px에서는
+   표가 가로 스크롤로 잘린다. 좁은 화면에서는 어차피 아래 폭이 줄어들고,
+   그때만 .insp-report-scroll의 가로 스크롤이 동작한다. */
+#report-subpage-inspection .report-wrap { max-width: 1000px; }
 .report-card {
   background: #fff; border-radius: 12px; padding: 28px;
   box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 20px;

@@ -517,7 +517,9 @@ M-Engine은 openpyxl로 파일을 만드는데, openpyxl은 그림(drawing) XML�
 | 파일 | 역할 |
 |---|---|
 | `manager/js/report-tab.js` | `reportSwitchSubTab()`(서브탭 전환), `loadInspectionReport()`(조회+집계+렌더), `buildInspPeriods()`(회차 구간 계산), `toggleInspDetail()`(설비 행 펼치기), `inspNowKst()`/`inspFirstResult()`(보조) |
-| `manager/css/manager.css` | `.insp-row-parent`/`.insp-row-child`(펼치기), `.insp-badge`/`.insp-partial`(상태·△부분), `.insp-report-scroll`(열이 7개라 좁은 화면에서는 표만 가로 스크롤) |
+| `manager/css/manager.css` | `.insp-row-parent`/`.insp-row-child`(펼치기), `.insp-badge`/`.insp-partial`(상태·△부분), `.insp-report-scroll`(좁은 화면에서 표만 가로 스크롤 — 페이지는 안 밀림), `#report-subpage-inspection .report-wrap`(이 서브탭만 1000px) |
+
+> 📌 **폭 주의**: `.report-wrap`의 기본값은 600px인데, 그건 이벤트 서브탭(필터·파일 목록) 기준이에요. 점검표는 열이 7개라 600px에서는 데스크톱에서도 표가 가로로 잘려요 — 그래서 이 서브탭만 1000px로 풀어놨어요(데스크톱 1265px에서 표 896px, 스크롤 없음 / 모바일 375px에서는 표만 스크롤). 열을 더 늘릴 거면 이 폭도 같이 봐야 해요.
 | `tests/expected-count.test.js` | 회차 수·구간을 M-Engine과 같은 케이스 표로 고정 (CI에서 배포 전 실행) |
 | `tests/func-key.test.js` | `Maxerve_Excel` 문서 → 점검표(func_key) 판정을 M-Engine과 같은 표로 고정 (CI에서 배포 전 실행) |
 | `manager/js/auth.js` | `buildCenterFilters()`의 대상 목록에 `report-insp` 추가 → `filter-center-report-insp` 셀렉트 및 `report-center-label` 채움 |
