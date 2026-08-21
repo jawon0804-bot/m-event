@@ -151,20 +151,22 @@ function setInspReportMsg(text, type) {
 //   점검표 행(매핑 축) : 엑셀이 만들어졌는가. 월말에 만들어지므로 그전엔 "진행중"이 맞다.
 //   설비 행(점검 축)   : 현장에서 점검했는가. **기간이 안 끝났어도 했으면 "완료"다.**
 // 이 둘을 하나로 섞어놨다가 "8/13에 점검을 끝낸 저수조설비가 진행중으로 보이는" 문제가 있었다.
-function inspBadge(kind, title) {
+function inspBadge(kind, title, overrideText) {
   const [bg, color, text] = {
-    // 점검표 행
-    ok:       ["#dcfce7", "#15803d", "정상"],
-    short:    ["#fee2e2", "#dc2626", "⚠️ 부족"],
-    unmapped: ["#ffedd5", "#c2410c", "미매핑"],
-    pending:  ["#f1f5f9", "#475569", "진행중"],
-    // 설비 행
+    // 점검표 행 — 매핑 축. "부족"은 뺐다(끝난 달이든 아니든 사람이 할 일은 점검뿐이라,
+    // 경고보다 "지금 어느 단계인지"를 보여주는 편이 쓸모 있다)
+    mapped:   ["#dcfce7", "#15803d", "작업완료"],
+    ready:    ["#dbeafe", "#1d4ed8", "대기중"],
+    progress: ["#f1f5f9", "#475569", "진행중"],
+    // 설비 행 — 점검 축.
+    // ⚠️ 자식의 "예정"을 부모처럼 "대기"라고 부르면 안 된다 — 부모의 "대기중"은
+    //    "다 하고 엑셀만 기다림"이고, 자식의 이 상태는 "아직 안 함"이라 뜻이 반대다.
     done:     ["#dcfce7", "#15803d", "완료"],
     missing:  ["#fee2e2", "#dc2626", "⚠️ 미완료"],
-    waiting:  ["#f1f5f9", "#475569", "대기"],
+    waiting:  ["#f1f5f9", "#475569", "예정"],
   }[kind];
   const tip = title ? ` title="${title}"` : "";
-  return `<span class="insp-badge" style="background:${bg};color:${color}"${tip}>${text}</span>`;
+  return `<span class="insp-badge" style="background:${bg};color:${color}"${tip}>${overrideText || text}</span>`;
 }
 
 // "2026-08-15 14:50" → "08-15 14:50" (연도는 조회한 달로 이미 정해져 있어 군더더기)
@@ -362,33 +364,40 @@ async function loadInspectionReport() {
 
     const html = `
       <p class="insp-report-legend">
-        점검표 행을 누르면 설비별로 펼쳐집니다. <b>매핑</b>은 엑셀이 만들어진 건수,
-        <b>점검</b>은 점검한 횟수(펼친 값의 합)입니다.
-        엑셀은 보통 월말에 만들어져서 <b>점검이 끝나도 점검표 행은 한동안 진행중</b>입니다.
+        점검표 행을 누르면 설비별로 펼쳐집니다. <b>점검</b>은 점검한 횟수(펼친 값의 합)입니다.
+        점검할 설비가 남아 있으면 <b>진행중</b>, 전부 점검하면 <b>대기중</b>,
+        엑셀까지 만들어지면 <b>작업완료</b>입니다 — 엑셀은 보통 월말에 만들어집니다.
       </p>
       <div class="insp-report-scroll">
       <table class="insp-report-table">
-        <thead><tr><th>구분</th><th>설비명</th><th>설비ID</th><th>매핑</th><th>점검</th><th>최근 점검</th><th>상태</th></tr></thead>
+        <thead><tr><th>구분</th><th>설비명</th><th>설비ID</th><th>점검</th><th>최근 점검</th><th>상태</th></tr></thead>
         <tbody>
           ${rows.map((r, i) => {
-            // 점검표 행의 상태 = 매핑 축(엑셀이 만들어졌는가). 숫자 두 개는 축이 다르다:
-            //   매핑 = 엑셀 몇 개 / 그 달 회차 몇 개
-            //   점검 = 완료한 칸 / 전체 칸(설비 × 회차)
-            const parentKind = r.expected === 0 ? "pending"
-              : r.count >= r.expected ? "ok"
-              : r.allDone ? "unmapped" : "short";
-            const parentTip = parentKind === "unmapped"
-              ? "설비 점검은 전부 끝났는데 엑셀이 아직 없습니다"
-              : parentKind === "pending" ? "아직 생성 시점이 안 됐습니다(보통 월말)" : "";
+            // 점검표 행의 상태 = 매핑 축. 매핑 건수를 따로 열로 두지 않고 상태 문구가
+            // 그 역할까지 한다(매핑완료 n).
+            //   매핑완료 : 엑셀이 하나라도 만들어짐. daily는 몇 개인지가 중요해서 수를 붙인다
+            //              (monthly는 1건이 정상이라 1일 때만 생략)
+            //   매핑대기 : 설비를 전부 점검했는데 엑셀이 아직 없음 — 사람이 할 일은 끝난 상태
+            //   진행중   : 아직 안 한 설비가 남음
+            const parentKind = r.count > 0 ? "mapped"
+              : (r.slotsTotal > 0 && r.slotsDone === r.slotsTotal) ? "ready" : "progress";
+            const showCount = r.stype !== "monthly" || r.count !== 1;
+            const parentText = parentKind === "mapped"
+              ? `작업완료${showCount ? " " + r.count : ""}`
+              : parentKind === "ready" ? "대기중" : "진행중";
+            const parentTip = parentKind === "mapped"
+              ? `엑셀 ${r.count}건 생성됨 (${r.stype} 회차 ${r.totalPeriods}건)`
+              : parentKind === "ready"
+                ? "설비 점검은 전부 끝났습니다 — 엑셀 생성만 남았습니다(보통 월말)"
+                : `설비 ${r.fidRows.length}개 × 회차 ${r.totalPeriods}건 중 ${r.slotsDone}칸 완료`;
             const parent = `
               <tr class="insp-row-parent" onclick="toggleInspDetail(${i})">
                 <td>${esc(r.stype)}</td>
                 <td><span class="insp-caret" id="insp-caret-${i}">▸</span>${esc(r.label)}</td>
                 <td>${r.fidRows.length}</td>
-                <td title="${r.stype} 회차 ${r.totalPeriods}건 중 지금까지 ${r.expected}건이 끝났습니다">${r.count}</td>
                 <td title="설비 ${r.fidRows.length}개 × 회차 ${r.totalPeriods}건 중 ${r.slotsDone}칸 완료">${r.slotsDone}</td>
                 <td class="insp-last">${r.lastAny ? esc(inspShortDt(r.lastAny.dt)) : ""}</td>
-                <td>${inspBadge(parentKind, parentTip)}</td>
+                <td>${inspBadge(parentKind, parentTip, parentText)}</td>
               </tr>`;
             const children = r.fidRows.map(f => {
               // 설비 행 = 점검 축. 기간이 안 끝났어도 **했으면 완료**다.
@@ -403,7 +412,6 @@ async function loadInspectionReport() {
               <tr class="insp-row-child" data-parent="${i}">
                 <td></td>
                 <td class="insp-fid-cell">${esc(f.fid)}${f.name ? `<span class="insp-fid-name">(${esc(f.name)})</span>` : ""}</td>
-                <td></td>
                 <td></td>
                 <td title="${r.stype} 회차 ${r.totalPeriods}건 중 ${total}건 점검">${total}</td>
                 <td class="insp-last">${f.last ? `${esc(inspShortDt(f.last.dt))}${f.last.w ? ` <span class="insp-fid-name">${esc(f.last.w)}</span>` : ""}` : "—"}</td>

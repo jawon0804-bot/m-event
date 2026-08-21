@@ -6,7 +6,15 @@
   --gray3: #9ca3af; --gray4: #6b7280; --gray5: #374151;
   --text:  #111827;
 }
-html, body { overflow-x: hidden; } /* 근무일지 표처럼 넓은 콘텐츠가 있어도 페이지 전체가 옆으로 밀려서 헤더/탭이 잘리는 것 방지 */
+/* 근무일지 표처럼 넓은 콘텐츠가 있어도 페이지 전체가 옆으로 밀려서 헤더/탭이 잘리는 것 방지.
+   ⚠️ [2026-08-20] `overflow-x: hidden`은 body를 스크롤 컨테이너로 만들어서
+   **position: sticky를 앱 전체에서 무력화**한다(헤더·메인탭이 실제로 안 붙어 있었다).
+   `clip`은 잘라내기만 하고 스크롤 컨테이너를 만들지 않아 sticky가 살아난다.
+   지원 안 하는 구형 브라우저는 아래 hidden으로 폴백(그 경우 sticky만 포기). */
+html, body { overflow-x: hidden; }
+@supports (overflow: clip) {
+  html, body { overflow-x: clip; }
+}
 body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background: var(--gray0); color: var(--text); }
 
 /* ── 로그인 ── */
@@ -72,7 +80,10 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 /* ── 메인 탭 (이벤트/엑셀/사진) ── */
 .main-tabs {
   background: var(--navy2); display: flex; padding: 0 24px;
-  position: sticky; top: 52px; z-index: 99;
+  /* [틀고정] 헤더(56px) 바로 아래. 예전 값 52px은 옛 헤더 높이라 탭 위 4px이
+     헤더 뒤로 숨어 있었다. 아래 오프셋들은 전부 실측값 기준이다:
+       헤더 56 / 메인탭 45 / 서브탭바 47~48 / 필터바 59 */
+  position: sticky; top: 56px; z-index: 99;
   overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; /* 탭이 화면보다 넓을 때 탭바만 독립적으로 스와이프 — body는 안 움직임 */
 }
 .main-tabs::-webkit-scrollbar { display: none; }
@@ -115,6 +126,9 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .event-toolbar {
   background: #fff; border-bottom: 1px solid var(--gray2);
   padding: 0 24px; display: flex; align-items: center; gap: 16px;
+  /* [틀고정] 헤더 56 + 메인탭 45 = 101px 아래에 붙는다. 이벤트·보고서·근무일지
+     세 페이지가 같은 클래스를 쓰므로 한 번에 적용된다. */
+  position: sticky; top: 101px; z-index: 98;
 }
 .sub-tabs { display: flex; }
 .sub-tab {
@@ -171,7 +185,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 .filter-bar {
   background: #fff; border-bottom: 1px solid var(--gray2);
   padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-  position: sticky; top: 98px; z-index: 98;
+  position: sticky; top: 101px; z-index: 98;   /* 헤더 56 + 메인탭 45 (이 페이지들엔 서브탭바가 없다) */
 }
 .filter-bar label  { font-size: 13px; color: var(--gray4); }
 .filter-bar select, .filter-bar input[type="date"] {
@@ -235,7 +249,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   padding: 10px 24px; background: var(--gray1);
   font-size: 13px; font-weight: 700; color: var(--gray5);
   border-bottom: 1px solid var(--gray2); border-top: 1px solid var(--gray2);
-  position: sticky; top: 106px; z-index: 10;
+  position: sticky; top: 160px; z-index: 10;   /* 헤더 56 + 메인탭 45 + 필터바 59 */
 }
 .excel-item {
   background: #fff; border-bottom: 1px solid var(--gray2);
@@ -266,7 +280,7 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   padding: 10px 24px; background: var(--gray1);
   font-size: 13px; font-weight: 700; color: var(--gray5);
   border-bottom: 1px solid var(--gray2); border-top: 1px solid var(--gray2);
-  position: sticky; top: 106px; z-index: 10;
+  position: sticky; top: 160px; z-index: 10;   /* 헤더 56 + 메인탭 45 + 필터바 59 */
   display: flex; justify-content: space-between; align-items: center;
 }
 .photo-group-body {
@@ -473,11 +487,14 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
 /* ══════════════════════════════════
    보고서 페이지
 ══════════════════════════════════ */
-/* [2026-08-20] 600 → 750px. 점검표 서브탭 표가 열 7개라 600px에서는 설비명이 계속
+/* [2026-08-20] 600 → 740px. 점검표 서브탭 표가 열이 많아 600px에서는 설비명이 계속
    접혔다. 서브탭마다 폭이 다르면 탭을 옮길 때마다 박스 크기가 튀어서 두 서브탭을
-   같은 폭으로 맞췄다(이벤트 서브탭도 같이 넓어진다). */
+   같은 폭으로 맞췄다(이벤트 서브탭도 같이 넓어진다).
+   740px인 이유: 실데이터(설비 57행)로 재보면 이 아래에서 이름 접힘이 급증한다 —
+   740→8행 / 720→26행 / 700→36행이 두 줄이 된다. 더 줄이려면 폭이 아니라
+   "최근 점검" 열에서 점검자를 빼는 쪽을 먼저 검토할 것. */
 .report-wrap {
-  max-width: 750px; margin: 40px auto; padding: 0 24px;
+  max-width: 740px; margin: 40px auto; padding: 0 24px;
 }
 /* 점검표 서브탭만 넓게. 이벤트 서브탭은 필터·파일 목록이라 600px가 맞지만,
    점검표는 열이 7개(구분·설비명·설비ID·매핑·점검·최근 점검·상태)라 600px에서는
@@ -545,13 +562,12 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
    그래서 카드를 넓히면 숫자 열까지 허옇게 벌어지고(1000px), 좁히면 다 같이
    쪼그라들어 설비명이 3줄로 접혔다(600px). 이제 카드를 넓히면 그 공간은 전부
    설비명 몫이라 이름이 한 줄에 들어가고, 숫자·상태는 항상 붙어 있다. */
-.insp-report-table { width: 100%; min-width: 560px; table-layout: fixed; border-collapse: collapse; font-size: 13.5px; }
+.insp-report-table { width: 100%; min-width: 520px; table-layout: fixed; border-collapse: collapse; font-size: 13.5px; }
 .insp-report-table th:nth-child(1) { width: 68px; }   /* 구분 */
 .insp-report-table th:nth-child(3) { width: 54px; }   /* 설비ID */
-.insp-report-table th:nth-child(4) { width: 46px; }   /* 매핑 */
-.insp-report-table th:nth-child(5) { width: 46px; }   /* 점검 */
-.insp-report-table th:nth-child(6) { width: 124px; }  /* 최근 점검 — 날짜+점검자가 한 줄에 들어가는 폭 */
-.insp-report-table th:nth-child(7) { width: 86px; }   /* 상태 */
+.insp-report-table th:nth-child(4) { width: 46px; }   /* 점검 */
+.insp-report-table th:nth-child(5) { width: 124px; }  /* 최근 점검 — 날짜+점검자가 한 줄에 들어가는 폭 */
+.insp-report-table th:nth-child(6) { width: 104px; }  /* 상태 — "매핑완료 12"가 안 접히는 폭 */
 /* 2열(설비명)은 폭을 안 준다 = 나머지를 전부 가져간다. 긴 이름은 두 줄로 접힌다. */
 .insp-report-table td:nth-child(2) { overflow-wrap: anywhere; }
 /* 폭이 600px(이벤트 서브탭과 같은 공용 폭)이라 열 7개가 빠듯하다 — 좌우 여백을 줄여
@@ -560,12 +576,11 @@ body { font-family: "Apple SD Gothic Neo","맑은 고딕",sans-serif; background
   padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--gray1);
 }
 .insp-report-table th { color: var(--gray4); font-size: 12px; font-weight: 700; white-space: nowrap; }
-/* 설비·매핑·점검(3~5열)은 숫자라 오른쪽 정렬 */
+/* 설비ID·점검(3~4열)은 숫자라 오른쪽 정렬 */
 .insp-report-table td:nth-child(3), .insp-report-table th:nth-child(3),
-.insp-report-table td:nth-child(4), .insp-report-table th:nth-child(4),
-.insp-report-table td:nth-child(5), .insp-report-table th:nth-child(5) { text-align: right; }
-/* 최근 점검(6열)은 날짜라 왼쪽 정렬 + 좁은 화면에서 줄바꿈 안 되게 */
-.insp-report-table td:nth-child(6), .insp-report-table th:nth-child(6) { text-align: left; padding-left: 8px; }
+.insp-report-table td:nth-child(4), .insp-report-table th:nth-child(4) { text-align: right; }
+/* 최근 점검(5열)은 날짜라 왼쪽 정렬 */
+.insp-report-table td:nth-child(5), .insp-report-table th:nth-child(5) { text-align: left; padding-left: 10px; }
 .insp-last { font-size: 12px; color: var(--gray4); white-space: nowrap; }
 .insp-report-table td:last-child, .insp-report-table th:last-child { text-align: center; }
 
