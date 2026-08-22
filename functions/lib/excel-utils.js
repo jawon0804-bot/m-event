@@ -7,8 +7,13 @@
 // 세 번째 사용처(excel-merge.js — 엑셀 탭 "전체 다운로드")가 생기면서 공유 모듈로 뺐다.
 // system_map.md가 반복해서 지적하는 "같은 로직이 두 군데 복제돼 한쪽만 고쳐지는" 패턴을
 // 애초에 만들지 않으려는 것.
-const ExcelJS = require("exceljs");
-const JSZip = require("jszip");
+// ⚠️ exceljs+jszip는 여기서 최상위 require를 하지 않는다 — 실제로 쓰는 함수 안에서 받는다.
+//    Firebase Functions 2nd Gen은 코드베이스 전체를 컨테이너 이미지 하나로 빌드하므로,
+//    index.js가 이 파일을 불러오는 순간 이 무거운 모듈이 **모든 함수**의 콜드 스타트에 얹힌다.
+//    loginWithCredentials는 이름·전화번호 조회가 전부인데 콜드 스타트가 2,473ms였고,
+//    그 절반 이상이 엑셀·메일 모듈 로드였다(2026-08-22 측정, M-SMART 로그인도 같은 함수를 쓴다).
+//    require는 Node가 캐시하므로 함수 안에서 받아도 두 번째 호출부터는 비용이 없다.
+//    ⛔ 이 줄들을 편의상 최상위로 되돌리지 말 것 — 되돌리는 순간 로그인이 다시 3초가 된다.
 
 // ==============================================================================
 // 워크북 간 시트 복제
@@ -175,6 +180,7 @@ function reorderSheetPrChildren(xml) {
 // ExcelJS가 만든 xlsx 버퍼를 받아 모든 워크시트의 <sheetPr> 순서를 교정한 버퍼를 반환.
 // 고칠 게 하나도 없으면 원본 버퍼를 그대로 돌려준다(불필요한 재압축 회피).
 async function fixSheetPrOrder(buf, logPrefix = "[엑셀]") {
+  const JSZip = require("jszip");
   const zip = await JSZip.loadAsync(buf);
   const paths = Object.keys(zip.files).filter(p => /^xl\/worksheets\/sheet\d+\.xml$/.test(p));
 
@@ -261,6 +267,8 @@ async function stripDrawings(zip) {
  * 셋 다 실패하면 마지막 에러를 그대로 throw 한다 (호출자가 그 파일만 건너뛸 수 있게).
  */
 async function loadWorkbookTolerant(buffer, logPrefix = "[엑셀]") {
+  const ExcelJS = require("exceljs");
+  const JSZip = require("jszip");
   const attempt = async buf => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);

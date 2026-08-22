@@ -1,7 +1,13 @@
 // lib/worklog-attendance.js
 // 출근부 템플릿을 읽어 근무일지 기본값을 자동으로 채워주는 스케줄
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const ExcelJS = require("exceljs");
+// ⚠️ exceljs는 여기서 최상위 require를 하지 않는다 — 실제로 쓰는 함수 안에서 받는다.
+//    Firebase Functions 2nd Gen은 코드베이스 전체를 컨테이너 이미지 하나로 빌드하므로,
+//    index.js가 이 파일을 불러오는 순간 이 무거운 모듈이 **모든 함수**의 콜드 스타트에 얹힌다.
+//    loginWithCredentials는 이름·전화번호 조회가 전부인데 콜드 스타트가 2,473ms였고,
+//    그 절반 이상이 엑셀·메일 모듈 로드였다(2026-08-22 측정, M-SMART 로그인도 같은 함수를 쓴다).
+//    require는 Node가 캐시하므로 함수 안에서 받아도 두 번째 호출부터는 비용이 없다.
+//    ⛔ 이 줄들을 편의상 최상위로 되돌리지 말 것 — 되돌리는 순간 로그인이 다시 3초가 된다.
 const { admin, db, bucket } = require("./firebase");
 const {
   ATTENDANCE_CODE_MAP,
@@ -14,6 +20,7 @@ const { getKstDateParts } = require("./dateUtils");
 // Storage에서 센터별 출근부 템플릿(templates/{center}/work_sheet.xlsx)을 불러와
 // 대상 월의 시트를 반환. 없으면 null.
 async function loadAttendanceSheet(center, month) {
+  const ExcelJS = require("exceljs");
   const templatePath = `templates/${center}/work_sheet.xlsx`;
   const templateFile = bucket.file(templatePath);
   const [exists] = await templateFile.exists();
